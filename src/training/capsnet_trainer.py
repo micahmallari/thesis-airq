@@ -15,10 +15,13 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import traceback
 from tqdm import tqdm
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 import json
 from datetime import datetime
 import shutil
+import time
+import warnings
+
 
 # Fix imports - use absolute imports
 try:
@@ -38,10 +41,14 @@ except ImportError:
 # Try to import Optuna for hyperparameter tuning (optional)
 try:
     import optuna
+    from optuna.pruners import MedianPruner
+    from optuna.samplers import TPESampler
     OPTUNA_AVAILABLE = True
+    print("✅ Optuna available for hyperparameter tuning")
 except ImportError:
     OPTUNA_AVAILABLE = False
-    print("⚠️ Optuna not available. Hyperparameter tuning will be disabled.")
+    print("⚠️ Optuna not available. Install with: pip install optuna")
+    print("   Hyperparameter tuning will be disabled.")
 
 class OutputManager:
     """Manages organized output folder structure"""
@@ -60,7 +67,8 @@ class OutputManager:
             'checkpoints': f"{base_dir}/{model_type}/checkpoints",
             'hyperparameters': f"{base_dir}/{model_type}/hyperparameters",
             'metadata': f"{base_dir}/{model_type}/metadata",
-            'experiments': f"{base_dir}/{model_type}/experiments"
+            'experiments': f"{base_dir}/{model_type}/experiments",
+            'tuning': f"{base_dir}/{model_type}/tuning"
         }
         
         # Create all directories
@@ -79,10 +87,12 @@ class OutputManager:
         subdirs = {
             'models': ['best', 'checkpoints', 'final', 'tuned'],
             'features': ['train', 'val', 'test', 'extracted'],
-            'plots': ['training', 'validation', 'features', 'analysis'],
+            'plots': ['training', 'validation', 'features', 'analysis', 'tuning'],
             'logs': ['training', 'testing', 'tuning'],
             'checkpoints': ['trunk', 'epoch', 'best'],
-            'experiments': ['runs', 'comparisons', 'ablations']
+            'experiments': ['runs', 'comparisons', 'ablations'],
+            'tuning': ['studies', 'results', 'plots', 'best_models'],
+            'hyperparameters': ['basic', 'advanced', 'studies']
         }
         
         for main_dir, sub_dirs in subdirs.items():
@@ -326,8 +336,6 @@ class AirQualityDataset(Dataset):
 
 import gc
 import psutil
-import time
-from typing import Optional
 
 class TrunkAirQualityDataset(Dataset):
     """Memory-efficient dataset that loads data in trunks"""
@@ -513,7 +521,15 @@ class CapsNetTrainer:
     """Complete CapsNet Trainer with training, testing, and hyperparameter tuning"""
     
     def __init__(self, input_size=256, feature_dim=128, device='cuda', model_type='capsnet'):
-        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
+        if torch.cuda.is_available():
+            try:
+                self.device = torch.device(device)   # e.g., "cuda:0"
+            except Exception as e:
+                print(f"⚠️ Could not use {device}, falling back to CPU. Error: {e}")
+                self.device = torch.device("cpu")
+        else:
+            self.device = torch.device("cpu")
+
         self.input_size = input_size
         self.feature_dim = feature_dim
         self.model_type = model_type
@@ -868,6 +884,8 @@ class CapsNetTrainer:
         self.val_metrics = []
         
         # Training loop
+        batch_images = batch_images.to(self.device)
+        batch_targets = batch_targets.to(self.device)
         best_val_loss = float('inf')
         patience_counter = 0
         patience = training_params.get('early_stopping_patience', 10)
@@ -1200,3 +1218,332 @@ class CapsNetTrainer:
             print(f"\n❌ Quick trunk test FAILED: {e}")
             traceback.print_exc()
             return False
+    
+    # HYPERPARAMETER TUNING FUNCTIONALITY
+    def tune_hyperparameters(self, day_folder, n_trials=50, max_epochs=20, batch_size=8, timeout=3600, enable_pruning=True, study_name=None):
+        """Basic hyperparameter tuning using Optuna"""
+        if not OPTUNA_AVAILABLE:
+            print("❌ Optuna is not available. Install with: pip install optuna")
+            return None
+
+        print(f"🔧 Starting basic hyperparameter tuning")
+        print(f"   Trials: {n_trials}")
+        print(f"   Max epochs per trial: {max_epochs}")
+        print(f"   Timeout: {timeout}s ({timeout/3600:.1f}h)")
+        print(f"   Pruning enabled: {enable_pruning}")
+        
+        # Prepare data once
+        train_dataset, val_dataset, _, _ = self.prepare_data(day_folder)
+        
+        def objective(trial):
+            try:
+                # Suggest basic hyperparameters
+                learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2, log=True)
+                dropout_rate = trial.suggest_float('dropout_rate', 0.1, 0.6)
+                feature_dim = trial.suggest_categorical('feature_dim', [64, 128, 256, 512])
+                optimizer_type = trial.suggest_categorical('optimizer_type', ['adam', 'adamw'])
+                weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-3, log=True)
+                batch_size_trial = trial.suggest_categorical('batch_size', [4, 8, 16, 32])
+                
+                # Create model with suggested parameters
+                self.feature_dim = feature_dim
+                self.create_model(dropout_rate=dropout_rate)
+                self.setup_training(
+                    learning_rate=learning_rate, 
+                    weight_decay=weight_decay,
+                    optimizer_type=optimizer_type
+                )
+                
+                # Create data loaders
+                train_loader = DataLoader(
+                    train_dataset, 
+                    batch_size=batch_size_trial, 
+                    shuffle=True, 
+                    collate_fn=custom_collate_fn,
+                    drop_last=True
+                )
+                val_loader = DataLoader(
+                    val_dataset, 
+                    batch_size=batch_size_trial, 
+                    shuffle=False, 
+                    collate_fn=custom_collate_fn
+                )
+                
+                # Training loop with pruning
+                best_val_loss = float('inf')
+                for epoch in range(max_epochs):
+                    train_loss, _ = self.train_epoch(train_loader)
+                    val_loss, _ = self.validate_epoch(val_loader)
+                    
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                    
+                    # Report intermediate value for pruning
+                    if enable_pruning:
+                        trial.report(val_loss, epoch)
+                        if trial.should_prune():
+                            raise optuna.exceptions.TrialPruned()
+                
+                return best_val_loss
+                
+            except optuna.exceptions.TrialPruned:
+                raise
+            except Exception as e:
+                print(f"Trial failed: {e}")
+                return float('inf')
+        
+        # Create study
+        if enable_pruning:
+            pruner = MedianPruner(n_startup_trials=5, n_warmup_steps=5)
+        else:
+            pruner = None
+            
+        sampler = TPESampler(seed=42)
+        
+        if study_name:
+            study_name = f"{study_name}_{day_folder}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        else:
+            study_name = f"capsnet_basic_tuning_{day_folder}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        study = optuna.create_study(
+            direction='minimize',
+            pruner=pruner,
+            sampler=sampler,
+            study_name=study_name
+        )
+        
+        # Optimize with timeout
+        study.optimize(objective, n_trials=n_trials, timeout=timeout)
+        
+        # Save results
+        self._save_tuning_results(study, day_folder, 'basic')
+        
+        print(f"\n🏆 Basic tuning completed!")
+        print(f"   Best trial: {study.best_trial.number}")
+        print(f"   Best value: {study.best_trial.value:.4f}")
+        print(f"   Best params: {study.best_trial.params}")
+        
+        return study.best_trial.params
+    
+    def tune_hyperparameters_advanced(self, day_folder, n_trials=100, max_epochs=25, batch_size=8, 
+                                    tune_architecture=True, tune_data_augmentation=True, 
+                                    tune_regularization=True, timeout=7200, enable_pruning=True, study_name=None):
+        """Advanced hyperparameter tuning with architecture and data augmentation parameters"""
+        if not OPTUNA_AVAILABLE:
+            print("❌ Optuna is not available. Install with: pip install optuna")
+            return None
+
+        print(f"🔧 Starting advanced hyperparameter tuning")
+        print(f"   Trials: {n_trials}")
+        print(f"   Max epochs per trial: {max_epochs}")
+        print(f"   Timeout: {timeout}s ({timeout/3600:.1f}h)")
+        print(f"   Architecture tuning: {tune_architecture}")
+        print(f"   Data augmentation tuning: {tune_data_augmentation}")
+        print(f"   Regularization tuning: {tune_regularization}")
+        
+        # Prepare data once
+        train_dataset, val_dataset, _, _ = self.prepare_data(day_folder)
+        
+        def objective(trial):
+            try:
+                # Basic hyperparameters
+                learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2, log=True)
+                optimizer_type = trial.suggest_categorical('optimizer_type', ['adam', 'adamw', 'sgd'])
+                batch_size_trial = trial.suggest_categorical('batch_size', [4, 8, 16, 32])
+                
+                # Architecture parameters
+                if tune_architecture:
+                    feature_dim = trial.suggest_categorical('feature_dim', [64, 128, 256, 512])
+                    # Could add more architecture parameters here like number of capsule layers, etc.
+                else:
+                    feature_dim = self.feature_dim
+                
+                # Regularization parameters
+                if tune_regularization:
+                    dropout_rate = trial.suggest_float('dropout_rate', 0.1, 0.7)
+                    weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-2, log=True)
+                    gradient_clip_norm = trial.suggest_float('gradient_clip_norm', 0.5, 2.0)
+                else:
+                    dropout_rate = 0.3
+                    weight_decay = 1e-4
+                    gradient_clip_norm = 1.0
+                
+                # Training parameters
+                early_stopping_patience = trial.suggest_int('early_stopping_patience', 5, 15)
+                
+                # Create model with suggested parameters
+                self.feature_dim = feature_dim
+                self.create_model(dropout_rate=dropout_rate)
+                self.setup_training(
+                    learning_rate=learning_rate, 
+                    weight_decay=weight_decay,
+                    optimizer_type=optimizer_type
+                )
+                
+                # Create data loaders
+                train_loader = DataLoader(
+                    train_dataset, 
+                    batch_size=batch_size_trial, 
+                    shuffle=True, 
+                    collate_fn=custom_collate_fn,
+                    drop_last=True
+                )
+                val_loader = DataLoader(
+                    val_dataset, 
+                    batch_size=batch_size_trial, 
+                    shuffle=False, 
+                    collate_fn=custom_collate_fn
+                )
+                
+                # Training loop with advanced parameters
+                best_val_loss = float('inf')
+                patience_counter = 0
+                
+                for epoch in range(max_epochs):
+                    train_loss, _ = self.train_epoch(train_loader, gradient_clip_norm)
+                    val_loss, _ = self.validate_epoch(val_loader)
+                    
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        patience_counter = 0
+                    else:
+                        patience_counter += 1
+                    
+                    # Early stopping
+                    if patience_counter >= early_stopping_patience:
+                        break
+                    
+                    # Report intermediate value for pruning
+                    if enable_pruning:
+                        trial.report(val_loss, epoch)
+                        if trial.should_prune():
+                            raise optuna.exceptions.TrialPruned()
+                
+                return best_val_loss
+                
+            except optuna.exceptions.TrialPruned:
+                raise
+            except Exception as e:
+                print(f"Advanced trial failed: {e}")
+                return float('inf')
+        
+        # Create advanced study
+        if enable_pruning:
+            pruner = MedianPruner(n_startup_trials=10, n_warmup_steps=8)
+        else:
+            pruner = None
+            
+        sampler = TPESampler(seed=42, n_startup_trials=20)
+        
+        if study_name:
+            study_name = f"{study_name}_advanced_{day_folder}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        else:
+            study_name = f"capsnet_advanced_tuning_{day_folder}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        study = optuna.create_study(
+            direction='minimize',
+            pruner=pruner,
+            sampler=sampler,
+            study_name=study_name
+        )
+        
+        # Optimize with timeout
+        study.optimize(objective, n_trials=n_trials, timeout=timeout)
+        
+        # Save results
+        self._save_tuning_results(study, day_folder, 'advanced')
+        
+        print(f"\n🏆 Advanced tuning completed!")
+        print(f"   Best trial: {study.best_trial.number}")
+        print(f"   Best value: {study.best_trial.value:.4f}")
+        print(f"   Best params: {study.best_trial.params}")
+        
+        return study.best_trial.params
+    
+    def _save_tuning_results(self, study, day_folder, tuning_type='basic'):
+        """Save hyperparameter tuning results"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Save best parameters
+        best_params_path = self.output_manager.get_path(
+            'hyperparameters', tuning_type, f'best_params_{tuning_type}_{day_folder}_{timestamp}.json', day_folder
+        )
+        with open(best_params_path, 'w') as f:
+            json.dump(study.best_trial.params, f, indent=2)
+        
+        # Save study results
+        study_results_path = self.output_manager.get_path(
+            'tuning', 'results', f'study_results_{tuning_type}_{day_folder}_{timestamp}.json', day_folder
+        )
+        
+        # Convert study to serializable format
+        study_data = {
+            'study_name': study.study_name,
+            'direction': study.direction.name,
+            'best_trial': {
+                'number': study.best_trial.number,
+                'value': study.best_trial.value,
+                'params': study.best_trial.params,
+                'datetime_start': study.best_trial.datetime_start.isoformat() if study.best_trial.datetime_start else None,
+                'datetime_complete': study.best_trial.datetime_complete.isoformat() if study.best_trial.datetime_complete else None
+            },
+            'n_trials': len(study.trials),
+            'trials': []
+        }
+        
+        # Add trial information
+        for trial in study.trials:
+            trial_data = {
+                'number': trial.number,
+                'value': trial.value,
+                'params': trial.params,
+                'state': trial.state.name,
+                'datetime_start': trial.datetime_start.isoformat() if trial.datetime_start else None,
+                'datetime_complete': trial.datetime_complete.isoformat() if trial.datetime_complete else None
+            }
+            study_data['trials'].append(trial_data)
+        
+        with open(study_results_path, 'w') as f:
+            json.dump(study_data, f, indent=2)
+        
+        # Create tuning plots
+        self._plot_tuning_results(study, day_folder, tuning_type, timestamp)
+        
+        print(f"💾 Tuning results saved:")
+        print(f"   Best params: {best_params_path}")
+        print(f"   Study results: {study_results_path}")
+    
+    def _plot_tuning_results(self, study, day_folder, tuning_type, timestamp):
+        """Create plots for hyperparameter tuning results"""
+        try:
+            import optuna.visualization as vis
+            
+            # Optimization history
+            fig = vis.plot_optimization_history(study)
+            history_path = self.output_manager.get_path(
+                'plots', 'tuning', f'optimization_history_{tuning_type}_{day_folder}_{timestamp}.html', day_folder
+            )
+            fig.write_html(history_path)
+            
+            # Parameter importance
+            if len(study.trials) > 10:  # Need enough trials for importance
+                fig = vis.plot_param_importances(study)
+                importance_path = self.output_manager.get_path(
+                    'plots', 'tuning', f'param_importance_{tuning_type}_{day_folder}_{timestamp}.html', day_folder
+                )
+                fig.write_html(importance_path)
+            
+            # Parallel coordinate plot
+            if len(study.best_trial.params) > 1:
+                fig = vis.plot_parallel_coordinate(study)
+                parallel_path = self.output_manager.get_path(
+                    'plots', 'tuning', f'parallel_coordinate_{tuning_type}_{day_folder}_{timestamp}.html', day_folder
+                )
+                fig.write_html(parallel_path)
+            
+            print(f"📊 Tuning plots saved in plots/tuning/")
+            
+        except ImportError:
+            print("⚠️ Optuna visualization not available. Install with: pip install optuna[visualization]")
+        except Exception as e:
+            print(f"⚠️ Could not create tuning plots: {e}")
