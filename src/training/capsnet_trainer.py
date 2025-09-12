@@ -26,6 +26,7 @@ import warnings
 # Fix imports - use absolute imports
 try:
     from models.capsnet_model import create_capsnet_feature_extractor
+    from models.capsnet_model import create_simplified_capsnet
 except ImportError:
     # Try alternative import path
     try:
@@ -190,98 +191,43 @@ def custom_collate_fn(batch):
 class AirQualityDataset(Dataset):
     """Air Quality Dataset that correctly follows the data flow"""
     
-    def __init__(self, learning_df, patch_metadata_df, day_folder, split_type='learning', transform=None):
+    def __init__(self, learning_df, patch_metadata_df, day_folder, split_type='learning', transform=None, max_patches_per_image=10):
         self.learning_df = learning_df.reset_index(drop=True)
         self.patch_metadata_df = patch_metadata_df.reset_index(drop=True)
         self.day_folder = day_folder
         self.split_type = split_type
         self.transform = transform
-        
-        # Filter patch metadata for this specific day
+        self.max_patches_per_image = max_patches_per_image
+        # Only use raw patches (no augmentations column)
         self.day_patches = self.patch_metadata_df[
             self.patch_metadata_df['day'] == day_folder
         ].reset_index(drop=True)
-        
         print(f"📊 Dataset initialization for {day_folder} ({split_type}):")
         print(f"   Input learning data: {len(self.learning_df)} entries")
         print(f"   Available patches for day: {len(self.day_patches)} patches")
-        
-        # Create data mapping
         self.data_mapping = self._create_data_mapping()
-        
         print(f"   Final dataset size: {len(self.data_mapping)} samples")
         if len(self.learning_df) > 0:
             print(f"   Expansion factor: {len(self.data_mapping) / len(self.learning_df):.1f}x")
-    
+
     def _create_data_mapping(self):
-        """Create mapping between learning data entries and patch files"""
+        """Create mapping between learning data entries and patch files, sampling up to K patches per image"""
         mapping = []
-        images_with_patches = 0
-        images_without_patches = 0
-        
-        print(f"   📊 Creating data mapping...")
-        print(f"   Processing {len(self.learning_df)} learning entries...")
-        
-        # Pre-group patches by image filename for faster lookup
         patches_by_image = self.day_patches.groupby('image_filename')
-        
-        # Add progress bar for mapping creation
-        progress_bar = tqdm(
-            self.learning_df.iterrows(), 
-            total=len(self.learning_df),
-            desc="   Mapping data",
-            leave=False,
-            ncols=100
-        )
-        
-        for idx, (_, learning_row) in enumerate(progress_bar):
+        for _, learning_row in tqdm(self.learning_df.iterrows(), total=len(self.learning_df), desc="Mapping patches"):
             image_filename = learning_row['image_filename']
-            
-            # Find all patches for this image using pre-grouped data
             if image_filename in patches_by_image.groups:
                 image_patches = patches_by_image.get_group(image_filename)
-                images_with_patches += 1
-                
-                # Create one entry per patch (each patch represents one augmented version)
-                for _, patch_row in image_patches.iterrows():
-                    mapping.append({
-                        # From learning data
-                        'image_filename': image_filename,
-                        'timestamp': learning_row['timestamp'],
-                        'pm2.5': float(learning_row['pm2.5']),
-                        'pm10': float(learning_row.get('pm10', 0)),
-                        'temperature': float(learning_row.get('temperature', 0)),
-                        'humidity': float(learning_row.get('humidity', 0)),
-                        'location': learning_row.get('location', 'unknown'),
-                        
-                        # From patch metadata
-                        'patch_idx': int(patch_row['patch_idx']),
-                        'augmentations': patch_row['augmentations'],
-                        'npy_path': patch_row['npy_path']
-                    })
-            else:
-                images_without_patches += 1
-            
-            # Update progress bar with current stats every 10 items
-            if (idx + 1) % 10 == 0:
-                progress_bar.set_postfix({
-                    'mapped': len(mapping),
-                    'with_patches': images_with_patches,
-                    'without': images_without_patches,
-                    'avg_patches_per_img': f"{len(mapping)/max(images_with_patches, 1):.1f}"
-                })
-        
-        progress_bar.close()
-        
-        print(f"   ✅ Mapping completed:")
-        print(f"      Total samples: {len(mapping)}")
-        print(f"      Images with patches: {images_with_patches}")
-        print(f"      Images without patches: {images_without_patches}")
-        if images_with_patches > 0:
-            avg_patches = len(mapping) / images_with_patches
-            print(f"      Average patches per image: {avg_patches:.1f}")
-            print(f"      This means each image has ~{avg_patches:.0f} augmented versions")
-        
+                # Sample up to K patches per image
+                if len(image_patches) > self.max_patches_per_image:
+                    sampled_patches = image_patches.sample(self.max_patches_per_image, random_state=42)
+                else:
+                    sampled_patches = image_patches
+                for _, patch_row in sampled_patches.iterrows():
+                    # Combine learning_row and patch_row info as needed
+                    entry = patch_row.to_dict()
+                    entry.update(learning_row.to_dict())
+                    mapping.append(entry)
         return mapping
     
     def __len__(self):
@@ -289,49 +235,36 @@ class AirQualityDataset(Dataset):
     
     def __getitem__(self, idx):
         data_entry = self.data_mapping[idx]
-        
-        # Load preprocessed .npy file
         npy_path = data_entry['npy_path']
         if not os.path.isabs(npy_path):
             npy_path = os.path.join('dataset', 'e_preprocessed_img', npy_path)
-        
-        # Load the preprocessed image
         try:
             image_data = np.load(npy_path)
-            
-            # Ensure correct format: (C, H, W)
             if len(image_data.shape) == 3:
-                if image_data.shape[0] == 3:  # Already CHW
+                if image_data.shape[0] == 3:
                     image = torch.FloatTensor(image_data)
-                elif image_data.shape[2] == 3:  # HWC -> CHW
+                elif image_data.shape[2] == 3:
                     image = torch.FloatTensor(image_data).permute(2, 0, 1)
                 else:
                     raise ValueError(f"Unexpected image shape: {image_data.shape}")
             else:
                 raise ValueError(f"Expected 3D image, got shape: {image_data.shape}")
-            
-            # Normalize if needed
             if image.max() > 1.0:
                 image = image / 255.0
-            
-            # Ensure correct size (256x256)
             if image.shape[1] != 256 or image.shape[2] != 256:
                 image = torch.nn.functional.interpolate(
                     image.unsqueeze(0), size=(256, 256), mode='bilinear', align_corners=False
                 ).squeeze(0)
-        
         except Exception as e:
             print(f"❌ Error loading {npy_path}: {e}")
-            # Return dummy data as fallback
             image = torch.zeros(3, 256, 256, dtype=torch.float32)
-        
-        # Get PM2.5 target
+        # On-the-fly augmentation
+        if self.transform is not None:
+            image = self.transform(image)
         pm25_val = data_entry['pm2.5']
         if pd.isna(pm25_val) or pm25_val <= 0:
-            pm25_val = 1.0  # Fallback value
-        
+            pm25_val = 1.0
         pm25 = torch.FloatTensor([pm25_val])
-        
         return image, pm25, data_entry
 
 import gc
@@ -340,113 +273,72 @@ import psutil
 class TrunkAirQualityDataset(Dataset):
     """Memory-efficient dataset that loads data in trunks"""
     
-    def __init__(self, learning_df, patch_metadata_df, day_folder, trunk_size=10000, split_type='learning', transform=None, max_patches_per_image=50):
+    def __init__(self, learning_df, patch_metadata_df, day_folder, trunk_size=10000, split_type='learning', transform=None, max_patches_per_image=10):
         self.learning_df = learning_df.reset_index(drop=True)
         self.patch_metadata_df = patch_metadata_df.reset_index(drop=True)
         self.day_folder = day_folder
         self.trunk_size = trunk_size
         self.split_type = split_type
         self.transform = transform
-        self.max_patches_per_image = max_patches_per_image  # NEW: Limit patches per image
-        
-        # Filter patch metadata for this specific day
+        self.max_patches_per_image = max_patches_per_image
         self.day_patches = self.patch_metadata_df[
             self.patch_metadata_df['day'] == day_folder
         ].reset_index(drop=True)
-        
         print(f"📊 TrunkDataset initialization for {day_folder} ({split_type}):")
         print(f"   Input learning data: {len(self.learning_df)} entries")
         print(f"   Available patches for day: {len(self.day_patches)} patches")
         print(f"   Max patches per image: {max_patches_per_image}")
-        
-        # Pre-group patches by image filename for faster lookup
         self.patches_by_image = self.day_patches.groupby('image_filename')
-        
-        # Calculate total samples with sampling
         self.total_samples = self._calculate_total_samples_with_sampling()
         self.num_trunks = max(1, (self.total_samples + trunk_size - 1) // trunk_size)
-        
         print(f"   Total samples (after sampling): {self.total_samples:,}")
         print(f"   Trunk size: {trunk_size:,}")
         print(f"   Number of trunks: {self.num_trunks}")
         print(f"   Estimated training time: {self.num_trunks * 0.5:.1f} hours (at 30min/trunk)")
-        
-        # Current trunk data
         self.current_trunk = 0
         self.current_trunk_data = []
         if self.total_samples > 0:
             self._load_trunk(0)
 
     def _calculate_total_samples_with_sampling(self):
-        """Calculate total samples with intelligent sampling"""
         total = 0
         for _, learning_row in self.learning_df.iterrows():
             image_filename = learning_row['image_filename']
             if image_filename in self.patches_by_image.groups:
                 image_patches = self.patches_by_image.get_group(image_filename)
-                # Limit patches per image to reduce redundancy
                 patches_to_use = min(len(image_patches), self.max_patches_per_image)
                 total += patches_to_use
         return total
 
     def _load_trunk(self, trunk_idx):
-        """Load a specific trunk of data with sampling"""
         if self.total_samples == 0:
             self.current_trunk_data = []
             return
-            
         print(f"📦 Loading trunk {trunk_idx + 1}/{self.num_trunks}...")
-        
         start_idx = trunk_idx * self.trunk_size
         end_idx = min(start_idx + self.trunk_size, self.total_samples)
-        
         self.current_trunk_data = []
         current_sample_idx = 0
-        
-        # Create mapping for this trunk with sampling
-        for _, learning_row in self.learning_df.iterrows():
+        for _, learning_row in tqdm(self.learning_df.iterrows(), total=len(self.learning_df), desc=f"Trunk {trunk_idx+1} mapping"):
             image_filename = learning_row['image_filename']
-            
             if image_filename in self.patches_by_image.groups:
                 image_patches = self.patches_by_image.get_group(image_filename)
-                
-                # Sample patches intelligently - take diverse augmentations
                 if len(image_patches) > self.max_patches_per_image:
-                    # Sample evenly across different augmentation types
-                    sampled_patches = image_patches.sample(n=self.max_patches_per_image, random_state=42)
+                    sampled_patches = image_patches.sample(self.max_patches_per_image, random_state=42)
                 else:
                     sampled_patches = image_patches
-                
                 for _, patch_row in sampled_patches.iterrows():
-                    if start_idx <= current_sample_idx < end_idx:
-                        self.current_trunk_data.append({
-                            # From learning data
-                            'image_filename': image_filename,
-                            'timestamp': learning_row['timestamp'],
-                            'pm2.5': float(learning_row['pm2.5']),
-                            'pm10': float(learning_row.get('pm10', 0)),
-                            'temperature': float(learning_row.get('temperature', 0)),
-                            'humidity': float(learning_row.get('humidity', 0)),
-                            'location': learning_row.get('location', 'unknown'),
-                            
-                            # From patch metadata
-                            'patch_idx': int(patch_row['patch_idx']),
-                            'augmentations': patch_row['augmentations'],
-                            'npy_path': patch_row['npy_path']
-                        })
-                    
+                    entry = patch_row.to_dict()
+                    entry.update(learning_row.to_dict())
+                    self.current_trunk_data.append(entry)
                     current_sample_idx += 1
-                    
                     if current_sample_idx >= end_idx:
                         break
-            
             if current_sample_idx >= end_idx:
                 break
-        
         self.current_trunk = trunk_idx
         print(f"   ✅ Loaded {len(self.current_trunk_data):,} samples for trunk {trunk_idx + 1}")
-        
-        # Force garbage collection
+        import gc
         gc.collect()
     
     def get_trunk_count(self):
@@ -471,50 +363,36 @@ class TrunkAirQualityDataset(Dataset):
     def __getitem__(self, idx):
         if idx >= len(self.current_trunk_data):
             raise IndexError(f"Index {idx} out of range for current trunk")
-        
         data_entry = self.current_trunk_data[idx]
-        
-        # Load preprocessed .npy file
         npy_path = data_entry['npy_path']
         if not os.path.isabs(npy_path):
             npy_path = os.path.join('dataset', 'e_preprocessed_img', npy_path)
-        
         try:
             image_data = np.load(npy_path)
-            
-            # Ensure correct format: (C, H, W)
             if len(image_data.shape) == 3:
-                if image_data.shape[0] == 3:  # Already CHW
+                if image_data.shape[0] == 3:
                     image = torch.FloatTensor(image_data)
-                elif image_data.shape[2] == 3:  # HWC -> CHW
+                elif image_data.shape[2] == 3:
                     image = torch.FloatTensor(image_data).permute(2, 0, 1)
                 else:
                     raise ValueError(f"Unexpected image shape: {image_data.shape}")
             else:
                 raise ValueError(f"Expected 3D image, got shape: {image_data.shape}")
-            
-            # Normalize if needed
             if image.max() > 1.0:
                 image = image / 255.0
-            
-            # Ensure correct size (256x256)
             if image.shape[1] != 256 or image.shape[2] != 256:
                 image = torch.nn.functional.interpolate(
                     image.unsqueeze(0), size=(256, 256), mode='bilinear', align_corners=False
                 ).squeeze(0)
-        
         except Exception as e:
             print(f"❌ Error loading {npy_path}: {e}")
-            # Return dummy data as fallback
             image = torch.zeros(3, 256, 256, dtype=torch.float32)
-        
-        # Get PM2.5 target
+        if self.transform is not None:
+            image = self.transform(image)
         pm25_val = data_entry['pm2.5']
         if pd.isna(pm25_val) or pm25_val <= 0:
-            pm25_val = 1.0  # Fallback value
-        
+            pm25_val = 1.0
         pm25 = torch.FloatTensor([pm25_val])
-        
         return image, pm25, data_entry
 
 class CapsNetTrainer:
@@ -555,15 +433,25 @@ class CapsNetTrainer:
         self.train_metrics = []
         self.val_metrics = []
     
-    def create_model(self, **model_params):
-        """Create CapsNet feature extractor model"""
-        self.feature_extractor = create_capsnet_feature_extractor(
-            input_channels=3,
-            input_size=self.input_size,
-            feature_dim=self.feature_dim,
-            **model_params
-        ).to(self.device)
-        
+    def create_model(self, use_simplified=False, **model_params):
+        """Create CapsNet feature extractor model. Set use_simplified=True to use the lightweight version for tuning."""
+        if use_simplified:
+            self.feature_extractor = create_simplified_capsnet(
+                input_channels=3,
+                input_size=self.input_size,
+                feature_dim=self.feature_dim,
+                **model_params
+            ).to(self.device)
+            print("[CapsNetTrainer] Using SimplifiedCapsNet for feature extraction.")
+        else:
+            self.feature_extractor = create_capsnet_feature_extractor(
+                input_channels=3,
+                input_size=self.input_size,
+                feature_dim=self.feature_dim,
+                **model_params
+            ).to(self.device)
+            print("[CapsNetTrainer] Using full CapsNetFeatureExtractor for feature extraction.")
+
         # Temporary regression head for training
         dropout_rate = model_params.get('dropout_rate', 0.3)
         self.temp_regressor = nn.Sequential(
@@ -575,10 +463,10 @@ class CapsNetTrainer:
             nn.Dropout(dropout_rate * 0.5),
             nn.Linear(64, 1)
         ).to(self.device)
-        
+
         total_params = sum(p.numel() for p in self.feature_extractor.parameters())
         print(f"   Total parameters: {total_params:,}")
-        
+
         return self.feature_extractor
     
     def setup_training(self, learning_rate=0.001, weight_decay=1e-4, optimizer_type='adam'):
@@ -1221,39 +1109,37 @@ class CapsNetTrainer:
     
     # HYPERPARAMETER TUNING FUNCTIONALITY
     def tune_hyperparameters(self, day_folder, n_trials=50, max_epochs=20, batch_size=8, timeout=3600, enable_pruning=True, study_name=None):
-        """Basic hyperparameter tuning using Optuna"""
+        """Basic hyperparameter tuning using Optuna with progress bar"""
         if not OPTUNA_AVAILABLE:
             print("❌ Optuna is not available. Install with: pip install optuna")
             return None
-
         print(f"🔧 Starting basic hyperparameter tuning")
         print(f"   Trials: {n_trials}")
         print(f"   Max epochs per trial: {max_epochs}")
         print(f"   Timeout: {timeout}s ({timeout/3600:.1f}h)")
         print(f"   Pruning enabled: {enable_pruning}")
-        
         # Prepare data once
         train_dataset, val_dataset, _, _ = self.prepare_data(day_folder)
-        
         def objective(trial):
+            print(f"\n[Optuna] Starting Trial {trial.number + 1}/{n_trials}")
             try:
                 # Suggest basic hyperparameters
-                learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2, log=True)
+                learning_rate = trial.suggest_categorical('learning_rate', [0.001, 0.01])
                 dropout_rate = trial.suggest_float('dropout_rate', 0.1, 0.6)
                 feature_dim = trial.suggest_categorical('feature_dim', [64, 128, 256, 512])
                 optimizer_type = trial.suggest_categorical('optimizer_type', ['adam', 'adamw'])
-                weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-3, log=True)
+                weight_decay = trial.suggest_categorical('weight_decay', [0.0001, 0.001, 0.01])
                 batch_size_trial = trial.suggest_categorical('batch_size', [4, 8, 16, 32])
-                
-                # Create model with suggested parameters
+                # Print hyperparameters for this trial
+                print(f"Hyperparameters: lr={learning_rate}, dropout={dropout_rate}, feature_dim={feature_dim}, opt={optimizer_type}, wd={weight_decay}, batch={batch_size_trial}")
+                # Create model with suggested parameters (always use simplified for tuning)
                 self.feature_dim = feature_dim
-                self.create_model(dropout_rate=dropout_rate)
+                self.create_model(use_simplified=True, dropout_rate=dropout_rate)
                 self.setup_training(
                     learning_rate=learning_rate, 
                     weight_decay=weight_decay,
                     optimizer_type=optimizer_type
                 )
-                
                 # Create data loaders
                 train_loader = DataLoader(
                     train_dataset, 
@@ -1268,38 +1154,39 @@ class CapsNetTrainer:
                     shuffle=False, 
                     collate_fn=custom_collate_fn
                 )
-                
-                # Training loop with pruning
+                # Training loop with per-trial progress bar
                 best_val_loss = float('inf')
-                for epoch in range(max_epochs):
-                    train_loss, _ = self.train_epoch(train_loader)
-                    val_loss, _ = self.validate_epoch(val_loader)
-                    
-                    if val_loss < best_val_loss:
-                        best_val_loss = val_loss
-                    
-                    # Report intermediate value for pruning
-                    if enable_pruning:
-                        trial.report(val_loss, epoch)
-                        if trial.should_prune():
-                            raise optuna.exceptions.TrialPruned()
-                
+                best_rmse = None
+                from tqdm import tqdm as tqdm_trial
+                with tqdm_trial(range(max_epochs), desc=f"Trial {trial.number + 1}", leave=False) as pbar_trial:
+                    for epoch in pbar_trial:
+                        train_loss, _ = self.train_epoch(train_loader)
+                        val_loss, val_metrics = self.validate_epoch(val_loader)
+                        if val_loss < best_val_loss:
+                            best_val_loss = val_loss
+                            best_rmse = val_metrics['rmse']
+                        # Report intermediate value for pruning
+                        if enable_pruning:
+                            trial.report(val_loss, epoch)
+                            if trial.should_prune():
+                                print(f"[Optuna] Trial {trial.number + 1} pruned at epoch {epoch + 1}")
+                                raise optuna.exceptions.TrialPruned()
+                        pbar_trial.set_postfix({"val_loss": f"{val_loss:.4f}", "rmse": f"{val_metrics['rmse']:.4f}"})
+                print(f"[Optuna] Trial {trial.number + 1} finished. Best RMSE: {best_rmse:.4f}, Best Val Loss: {best_val_loss:.4f}")
+                print(f"[Optuna] Trial {trial.number + 1} hyperparameters: {trial.params}")
                 return best_val_loss
-                
             except optuna.exceptions.TrialPruned:
                 raise
             except Exception as e:
-                print(f"Trial failed: {e}")
+                print(f"[Optuna] Trial {trial.number + 1} failed: {e}")
+                print(f"[Optuna] Failed trial hyperparameters: {trial.params}")
                 return float('inf')
-        
-        # Create study
+        from tqdm import tqdm as tqdm_outer
         if enable_pruning:
             pruner = MedianPruner(n_startup_trials=5, n_warmup_steps=5)
         else:
             pruner = None
-            
         sampler = TPESampler(seed=42)
-        
         if study_name:
             study_name = f"{study_name}_{day_folder}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         else:
@@ -1311,18 +1198,17 @@ class CapsNetTrainer:
             sampler=sampler,
             study_name=study_name
         )
-        
-        # Optimize with timeout
-        study.optimize(objective, n_trials=n_trials, timeout=timeout)
-        
-        # Save results
+        print("\n[Optuna] Running trials:")
+        with tqdm_outer(total=n_trials, desc="Optuna Trials") as pbar:
+            def callback(study, trial):
+                print(f"Trial {trial.number + 1}/{n_trials} completed.")
+                pbar.update(1)
+            study.optimize(objective, n_trials=n_trials, timeout=timeout, callbacks=[callback])
         self._save_tuning_results(study, day_folder, 'basic')
-        
         print(f"\n🏆 Basic tuning completed!")
         print(f"   Best trial: {study.best_trial.number}")
         print(f"   Best value: {study.best_trial.value:.4f}")
         print(f"   Best params: {study.best_trial.params}")
-        
         return study.best_trial.params
     
     def tune_hyperparameters_advanced(self, day_folder, n_trials=100, max_epochs=25, batch_size=8, 
@@ -1371,9 +1257,9 @@ class CapsNetTrainer:
                 # Training parameters
                 early_stopping_patience = trial.suggest_int('early_stopping_patience', 5, 15)
                 
-                # Create model with suggested parameters
+                # Create model with suggested parameters (always use simplified for tuning)
                 self.feature_dim = feature_dim
-                self.create_model(dropout_rate=dropout_rate)
+                self.create_model(use_simplified=True, dropout_rate=dropout_rate)
                 self.setup_training(
                     learning_rate=learning_rate, 
                     weight_decay=weight_decay,

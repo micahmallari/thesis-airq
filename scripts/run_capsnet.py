@@ -79,7 +79,7 @@ class Config:
 
 def quick_test(day_folder, max_samples=50, max_epochs=3):
     """Run quick test to verify pipeline works"""
-    print(f"\n=== Quick Test Mode ===")
+    print(f"\n=== Quick Test Mode ===") # Should print 'NVIDIA GeForce RTX 3050'
     
     try:
         from test_capsnet import QuickTester
@@ -470,7 +470,7 @@ def main():
     
     args = parser.parse_args()
     
-    print("🚀 CapsNet Feature Extractor")
+    print("🚀 CapsNet Feature Extractor") # Should print 'NVIDIA GeForce RTX 3050'
     print("=" * 50)
     print(f"Mode: {args.mode}")
     print(f"Day: {args.day}")
@@ -694,3 +694,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+   

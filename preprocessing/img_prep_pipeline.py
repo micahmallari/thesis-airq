@@ -1,12 +1,12 @@
-import os, random, itertools
-import numpy as np, pandas as pd
+
+import os
+import numpy as np
+import pandas as pd
 from PIL import Image
 from torchvision import transforms
-import torchvision.transforms.functional as TF
 
 PATCH_SIZE  = 256
 STRIDE      = 128
-AUGMENT     = True
 RAW_ROOT    = 'dataset/a_raw'
 OUTPUT_ROOT = 'dataset/e_preprocessed_img'
 PATCH_META  = os.path.join(OUTPUT_ROOT, 'patch_metadata.csv')
@@ -14,29 +14,6 @@ PATCH_META  = os.path.join(OUTPUT_ROOT, 'patch_metadata.csv')
 def z_score_normalize(t):
     m, s = t.mean(), t.std() + 1e-6
     return (t - m) / s
-
-# Individual augmentations
-def aug_rotate(img): return TF.rotate(img, random.uniform(-15, 15), fill=0)
-def aug_brightness(img): return TF.adjust_brightness(img, random.uniform(0.8, 1.2))
-def aug_contrast(img): return TF.adjust_contrast(img, random.uniform(0.8, 1.2))
-def aug_hflip(img): return TF.hflip(img)
-
-AUGMENTATIONS = {
-    'rotate': aug_rotate,
-    'brightness': aug_brightness,
-    'contrast': aug_contrast,
-    'hflip': aug_hflip
-}
-
-# Generate all non-empty combinations
-AUG_COMBINATIONS = []
-for r in range(1, len(AUGMENTATIONS)+1):
-    AUG_COMBINATIONS.extend(itertools.combinations(AUGMENTATIONS.keys(), r))
-
-def apply_augmentations(img, aug_list):
-    for aug_name in aug_list:
-        img = AUGMENTATIONS[aug_name](img)
-    return img
 
 def extract_patches(img):
     arr = np.array(img)
@@ -50,49 +27,45 @@ def extract_patches(img):
 
 def process_day(day_folder, patch_meta):
     img_dir = os.path.join(RAW_ROOT, day_folder, 'images', 'pictures')
-    if not os.path.isdir(img_dir): return
-
+    if not os.path.isdir(img_dir):
+        return
     patch_out_dir = os.path.join(OUTPUT_ROOT, day_folder, 'patch')
     os.makedirs(patch_out_dir, exist_ok=True)
-
+    MAX_PATCHES_PER_IMAGE = 50  # Change this value as needed
+    import random
     for fname in sorted(os.listdir(img_dir)):
         name, ext = os.path.splitext(fname)
-        if ext.lower() not in ('.png', '.jpg', '.jpeg'): continue
-
+        if ext.lower() not in ('.png', '.jpg', '.jpeg'):
+            continue
         img_path = os.path.join(img_dir, fname)
         img = Image.open(img_path)
-
-        # PATCHING
         patches = extract_patches(img)
-        for idx, patch in enumerate(patches):
-            patch = patch.convert('RGB')  # 👈 Force 3 channels
-            selected_combos = random.sample(AUG_COMBINATIONS, k=2)
-            for aug_combo in selected_combos:
-                aug_patch = apply_augmentations(patch.copy(), aug_combo)
-                t = transforms.ToTensor()(aug_patch)  # shape should now be [3, 256, 256]
-
-                # Sanity check
-                if t.shape[0] != 3:
-                    print(f"❌ Invalid patch shape {t.shape}, skipping: {npy_name}")
-                    continue
-
-                if t.mean() < 0.05 or t.std() < 0.01: continue
-                tr = z_score_normalize(t)
-
-                suffix = "_".join(aug_combo) if aug_combo else "none"
-                npy_name = f"{name}_p{idx}_{suffix}.npy"
-                arr = tr.numpy()
-
-                np.save(os.path.join(patch_out_dir, npy_name), arr)
-                print(f"Saved {npy_name} with shape: {arr.shape}")
-
-                patch_meta.append({
-                    'day': day_folder,
-                    'image_filename': fname,
-                    'patch_idx': idx,
-                    'augmentations': suffix,
-                    'npy_path': os.path.join(day_folder, 'patch', npy_name)
-                })
+        # Randomly sample up to MAX_PATCHES_PER_IMAGE
+        if len(patches) > MAX_PATCHES_PER_IMAGE:
+            sampled_indices = random.sample(range(len(patches)), MAX_PATCHES_PER_IMAGE)
+            sampled_patches = [patches[i] for i in sampled_indices]
+        else:
+            sampled_patches = patches
+        for idx, patch in enumerate(sampled_patches):
+            patch = patch.convert('RGB')
+            t = transforms.ToTensor()(patch)
+            if t.shape[0] != 3:
+                print(f"❌ Invalid patch shape {t.shape}, skipping: {name}_p{idx}_none.npy")
+                continue
+            if t.mean() < 0.05 or t.std() < 0.01:
+                continue
+            tr = z_score_normalize(t)
+            npy_name = f"{name}_p{idx}_none.npy"
+            arr = tr.numpy()
+            np.save(os.path.join(patch_out_dir, npy_name), arr)
+            print(f"Saved {npy_name} with shape: {arr.shape}")
+            patch_meta.append({
+                'day': day_folder,
+                'image_filename': fname,
+                'patch_idx': idx,
+                'augmentations': 'none',
+                'npy_path': os.path.join(day_folder, 'patch', npy_name)
+            })
 
 
 def main():
