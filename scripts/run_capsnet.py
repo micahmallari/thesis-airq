@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """CapsNet Feature Extractor for Air Quality Prediction
-Handles training, testing, and feature extraction for CapsNet models"""
+Handles training, testing, and feature extraction for CapsNet models with attention pooling support"""
 
 import os
 import sys
@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
+from src.training.capsnet_trainer import CapsNetTrainer
 
 # Add src directory to Python path
 current_dir = Path(__file__).parent
@@ -23,7 +24,7 @@ sys.path.insert(0, str(parent_dir))
 try:
     # Try multiple import approaches
     try:
-        from training.capsnet_trainer import CapsNetTrainer
+        from capsnet_trainer import CapsNetTrainer
     except ImportError:
         from src.training.capsnet_trainer import CapsNetTrainer
 except ImportError as e:
@@ -43,7 +44,7 @@ except ImportError as e:
             sys.path.insert(0, path)
     
     try:
-        from training.capsnet_trainer import CapsNetTrainer
+        from capsnet_trainer import CapsNetTrainer
     except ImportError:
         try:
             from capsnet_trainer import CapsNetTrainer
@@ -165,49 +166,69 @@ def check_data_availability():
         print("\n🎉 All required data files found!")
         return True
 
-def train_feature_extractor(day_folder):
-    """Train CapsNet feature extractor for a specific day"""
+def train_feature_extractor(day_folder, use_attention_pooling=False, max_patches_per_image=50):
+    """Train CapsNet feature extractor for a specific day with optional attention pooling"""
     print(f"\n=== Training CapsNet Feature Extractor for {day_folder} ===")
+    if use_attention_pooling:
+        print(f"🎯 Using attention pooling with max {max_patches_per_image} patches per image")
+        print(f"   This will aggregate patches per image using learned attention weights")
+        print(f"   Spatial encoding: Positional embeddings + Augmentation type embeddings")
     
     # Create directories
     Config.create_directories()
     
     try:
-        # Initialize trainer
+        # Initialize trainer with attention pooling option
         trainer = CapsNetTrainer(
             input_size=Config.INPUT_SIZE,
             feature_dim=Config.FEATURE_DIM,
-            device=Config.DEVICE
+            device=Config.DEVICE,
+            use_attention_pooling=use_attention_pooling
         )
         
         # Prepare data
         print("Preparing data...")
         train_dataset, val_dataset, learning_df, patch_metadata_df = trainer.prepare_data(
             day_folder=day_folder,
-            test_size=Config.TEST_SIZE
+            test_size=Config.TEST_SIZE,
+            max_patches_per_image=max_patches_per_image
         )
         
         print(f"✅ Data prepared successfully!")
         print(f"   Train dataset size: {len(train_dataset)}")
         print(f"   Validation dataset size: {len(val_dataset)}")
         
+        if use_attention_pooling:
+            print(f"   Mode: Attention pooling (patches grouped by image)")
+            print(f"   Each sample contains multiple patches from the same image")
+        else:
+            print(f"   Mode: Standard (individual patches)")
+            print(f"   Each sample is a single patch")
+        
         if len(train_dataset) == 0 or len(val_dataset) == 0:
             print("❌ No data found! Check your data structure.")
             return False
         
+        # Create model
+        trainer.create_model()
+        trainer.setup_training(learning_rate=0.001)
+        
         # Train feature extractor
         print("Starting feature extractor training...")
-        trainer.train(
+        best_loss = trainer.train(
             train_dataset, 
             val_dataset,
             epochs=Config.EPOCHS,
-            batch_size=Config.BATCH_SIZE
+            batch_size=Config.BATCH_SIZE,
+            day_folder=day_folder
         )
         
         # Plot results
-        trainer.plot_training_history()
+        trainer.plot_training_history(day_folder=day_folder)
         
         print("✅ Feature extractor training completed successfully!")
+        print(f"   Best validation loss: {best_loss:.4f}")
+        
         return True
         
     except Exception as e:
@@ -428,7 +449,7 @@ def inspect_day_data(day_folder):
         print(f"❌ Error inspecting data: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description='CapsNet Feature Extractor')
+    parser = argparse.ArgumentParser(description='CapsNet Feature Extractor with Attention Pooling')
     parser.add_argument('--mode', choices=['train', 'test', 'extract', 'tune', 'tune_advanced', 'trunk', 'trunk_optimized'],
                         required=True, help='Operation mode')
     parser.add_argument('--day', required=True, help='Day folder to process')
@@ -437,6 +458,13 @@ def main():
     parser.add_argument('--feature_dim', type=int, default=128, help='Feature dimension')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--device', default='cuda', help='Device to use')
+    
+    parser.add_argument('--use_attention_pooling', action='store_true', 
+                        help='Use attention pooling to aggregate patches per image with spatial encoding')
+    parser.add_argument('--max_patches_per_image', type=int, default=50, 
+                        help='Maximum patches per image for attention pooling')
+    parser.add_argument('--attention_heads', type=int, default=4, 
+                        help='Number of attention heads for attention pooling')
     
     # Test mode specific arguments
     parser.add_argument('--test_samples', type=int, default=50, help='Max samples for testing')
@@ -460,7 +488,6 @@ def main():
     parser.add_argument('--use_trunk', action='store_true', help='Use trunk-based training for large datasets')
     
     # OPTIMIZATION arguments
-    parser.add_argument('--max_patches_per_image', type=int, default=50, help='Max patches per image for optimization')
     parser.add_argument('--optimized_trunk_size', type=int, default=50000, help='Larger trunk size for optimization')
     parser.add_argument('--optimized_batch_size', type=int, default=16, help='Larger batch size for optimization')
     
@@ -470,11 +497,16 @@ def main():
     
     args = parser.parse_args()
     
-    print("🚀 CapsNet Feature Extractor")
-    print("=" * 50)
+    print("🚀 CapsNet Feature Extractor with Attention Pooling & Spatial Encoding")
+    print("=" * 70)
     print(f"Mode: {args.mode}")
     print(f"Day: {args.day}")
     print(f"Device: {args.device}")
+    print(f"Use attention pooling: {args.use_attention_pooling}")
+    if args.use_attention_pooling:
+        print(f"Max patches per image: {args.max_patches_per_image}")
+        print(f"Attention heads: {args.attention_heads}")
+        print(f"Spatial encoding: Positional + Augmentation embeddings")
     print(f"Output directory: {args.output_dir}")
     if args.use_trunk or args.mode == 'trunk':
         print(f"Trunk size: {args.trunk_size:,}")
@@ -484,14 +516,15 @@ def main():
         print(f"Tuning epochs per trial: {args.tune_epochs}")
         if args.tune_timeout:
             print(f"Tuning timeout: {args.tune_timeout}s ({args.tune_timeout/3600:.1f}h)")
-    print("=" * 50)
+    print("=" * 70)
     
-    # Initialize trainer with organized outputs
+    # Initialize trainer with organized outputs and attention pooling
     trainer = CapsNetTrainer(
         input_size=256,
         feature_dim=args.feature_dim,
         device=args.device,
-        model_type=args.model_type
+        model_type=args.model_type,
+        use_attention_pooling=args.use_attention_pooling
     )
     
     try:
@@ -522,6 +555,8 @@ def main():
 
         elif args.mode == 'tune':
             print("\n🔧 Basic Hyperparameter Tuning")
+            if args.use_attention_pooling:
+                print("   Including attention pooling parameters")
             print("-" * 30)
             best_params = trainer.tune_hyperparameters(
                 day_folder=args.day,
@@ -536,6 +571,8 @@ def main():
             
         elif args.mode == 'tune_advanced':
             print("\n🔧 Advanced Hyperparameter Tuning")
+            if args.use_attention_pooling:
+                print("   Including attention pooling and spatial encoding parameters")
             print("-" * 30)
             
             # Configure advanced tuning options
@@ -561,85 +598,21 @@ def main():
             print("\n🏋️ Training CapsNet")
             print("-" * 30)
             
-            # Create model
-            trainer.create_model()
-            trainer.setup_training(learning_rate=args.learning_rate)
+            # Train with attention pooling support
+            success = train_feature_extractor(
+                day_folder=args.day,
+                use_attention_pooling=args.use_attention_pooling,
+                max_patches_per_image=args.max_patches_per_image
+            )
             
-            if args.use_trunk:
-                print("Using trunk-based training for large dataset...")
-                
-                # Prepare trunk data
-                trunk_train_dataset, val_dataset, _, _ = trainer.prepare_trunk_data(
-                    args.day, trunk_size=args.trunk_size
-                )
-                
-                print(f"Dataset info:")
-                print(f"   Total samples: {trunk_train_dataset.total_samples:,}")
-                print(f"   Trunks: {trunk_train_dataset.get_trunk_count()}")
-                print(f"   Validation samples: {len(val_dataset)}")
-                
-                # Confirm before starting (for large datasets)
-                if trunk_train_dataset.total_samples > 100000:
-                    response = input(f"\nThis will process {trunk_train_dataset.total_samples:,} samples. Continue? (y/N): ")
-                    if response.lower() != 'y':
-                        print("Training cancelled.")
-                        sys.exit(0)
-                
-                # Train with trunks - simplified for testing
-                print("Starting simplified trunk training...")
-                best_loss = float('inf')
-                
-                # Create data loaders
-                from torch.utils.data import DataLoader
-                from capsnet_trainer import custom_collate_fn
-                
-                train_loader = DataLoader(
-                    trunk_train_dataset,
-                    batch_size=args.batch_size,
-                    shuffle=True,
-                    num_workers=0,
-                    collate_fn=custom_collate_fn,
-                    drop_last=True
-                )
-                
-                val_loader = DataLoader(
-                    val_dataset,
-                    batch_size=args.batch_size,
-                    shuffle=False,
-                    num_workers=0,
-                    collate_fn=custom_collate_fn
-                )
-                
-                # Simple training loop for testing
-                for epoch in range(args.epochs_per_trunk):
-                    print(f"Epoch {epoch+1}/{args.epochs_per_trunk}")
-                    train_loss, train_metrics = trainer.train_epoch(train_loader, 1.0)
-                    val_loss, val_metrics = trainer.validate_epoch(val_loader)
-                    
-                    if val_loss < best_loss:
-                        best_loss = val_loss
-                    
-                    print(f"   Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
-                    print(f"   Train RMSE: {train_metrics['rmse']:.4f} | Val RMSE: {val_metrics['rmse']:.4f}")
-                
+            if success:
+                print(f"\n✅ Training completed successfully!")
+                if args.use_attention_pooling:
+                    print("   Model trained with attention pooling and spatial encoding")
+                    print("   Patches are aggregated per image using learned attention weights")
             else:
-                print("Using standard training...")
-                
-                # Prepare data
-                train_dataset, val_dataset, _, _ = trainer.prepare_data(args.day)
-                
-                # Train
-                best_loss = trainer.train(
-                    train_dataset, val_dataset,
-                    epochs=args.epochs,
-                    batch_size=args.batch_size,
-                    day_folder=args.day
-                )
-            
-            # Plot training history
-            trainer.plot_training_history(day_folder=args.day)
-            
-            print(f"\n✅ Training completed! Best loss: {best_loss:.4f}")
+                print(f"\n❌ Training failed!")
+                sys.exit(1)
         
         elif args.mode == 'extract':
             print("\n🔍 Extracting Features")
@@ -669,7 +642,10 @@ def main():
             trainer.load_model(model_path)
             
             # Prepare data
-            train_dataset, val_dataset, _, _ = trainer.prepare_data(args.day)
+            train_dataset, val_dataset, _, _ = trainer.prepare_data(
+                args.day, 
+                max_patches_per_image=args.max_patches_per_image
+            )
             
             # Extract features
             print("Extracting training features...")
@@ -685,6 +661,8 @@ def main():
             print(f"\n✅ Features extracted and saved!")
             print(f"Training: {len(train_features)} samples")
             print(f"Validation: {len(val_features)} samples")
+            if args.use_attention_pooling:
+                print("Features extracted using attention pooling with spatial encoding")
     
     except Exception as e:
         print(f"\n❌ Error in {args.mode} mode: {e}")

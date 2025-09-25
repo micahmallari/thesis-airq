@@ -8,6 +8,121 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+class AttentionPooling(nn.Module):
+    """
+    Attention pooling module to aggregate patch embeddings into a single representation.
+    Learns which patches are more informative for the prediction task.
+    """
+    
+    def __init__(self, feature_dim=128, hidden_dim=64, num_heads=4, max_patches=100):
+        super(AttentionPooling, self).__init__()
+        self.feature_dim = feature_dim
+        self.hidden_dim = hidden_dim
+        self.num_heads = num_heads
+        self.max_patches = max_patches
+        
+        # Learnable positional embeddings for patch indices
+        self.position_embeddings = nn.Embedding(max_patches, feature_dim)
+        
+        # Common augmentation types from your metadata
+        augmentation_types = [
+            'brightness', 'rotate', 'rotate_brightness_hflip', 
+            'rotate_brightness_contrast', 'contrast_hflip', 'original'
+        ]
+        self.augmentation_embeddings = nn.Embedding(len(augmentation_types), feature_dim // 4)
+        self.augmentation_to_idx = {aug: i for i, aug in enumerate(augmentation_types)}
+        
+        # Multi-head attention for learning patch importance
+        self.multihead_attn = nn.MultiheadAttention(
+            embed_dim=feature_dim,
+            num_heads=num_heads,
+            dropout=0.1,
+            batch_first=True
+        )
+        
+        # Learnable query vector for attention pooling
+        self.query = nn.Parameter(torch.randn(1, 1, feature_dim))
+        
+        # Additional processing layers
+        self.norm1 = nn.LayerNorm(feature_dim)
+        self.norm2 = nn.LayerNorm(feature_dim)
+        
+        # Feed-forward network
+        self.ffn = nn.Sequential(
+            nn.Linear(feature_dim, hidden_dim * 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim * 2, feature_dim)
+        )
+        
+        # Final projection
+        self.final_projection = nn.Sequential(
+            nn.Linear(feature_dim, feature_dim),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(feature_dim, feature_dim)
+        )
+        
+    def forward(self, patch_features, patch_indices=None, augmentation_types=None, patch_mask=None):
+        """
+        Args:
+            patch_features: [batch_size, num_patches, feature_dim]
+            patch_indices: [batch_size, num_patches] - spatial patch indices (0, 1, 2, ...)
+            augmentation_types: [batch_size, num_patches] - augmentation type indices
+            patch_mask: [batch_size, num_patches] - mask for valid patches
+            
+        Returns:
+            aggregated_features: [batch_size, feature_dim]
+            attention_weights: [batch_size, num_patches] - learned attention weights
+        """
+        batch_size, num_patches, feature_dim = patch_features.shape
+        
+        if patch_indices is not None:
+            # Clamp indices to valid range
+            patch_indices = torch.clamp(patch_indices, 0, self.max_patches - 1)
+            position_embeds = self.position_embeddings(patch_indices)  # [batch_size, num_patches, feature_dim]
+            patch_features = patch_features + position_embeds
+        
+        if augmentation_types is not None:
+            aug_embeds = self.augmentation_embeddings(augmentation_types)  # [batch_size, num_patches, feature_dim//4]
+            # Expand augmentation embeddings to match feature dimension
+            aug_embeds_expanded = torch.cat([aug_embeds] * 4, dim=-1)  # [batch_size, num_patches, feature_dim]
+            patch_features = patch_features + aug_embeds_expanded
+        
+        # Expand query for batch processing
+        query = self.query.expand(batch_size, -1, -1)  # [batch_size, 1, feature_dim]
+        
+        # Apply multi-head attention
+        # Query attends to all patches to learn importance
+        attended_features, attention_weights = self.multihead_attn(
+            query=query,
+            key=patch_features,
+            value=patch_features,
+            key_padding_mask=patch_mask if patch_mask is not None else None
+        )
+        
+        # attended_features: [batch_size, 1, feature_dim]
+        # attention_weights: [batch_size, 1, num_patches]
+        
+        # Residual connection and normalization
+        attended_features = self.norm1(attended_features + query)
+        
+        # Feed-forward network with residual connection
+        ffn_output = self.ffn(attended_features)
+        attended_features = self.norm2(attended_features + ffn_output)
+        
+        # Final projection and squeeze
+        aggregated_features = self.final_projection(attended_features.squeeze(1))  # [batch_size, feature_dim]
+        
+        # Return attention weights for interpretability
+        attention_weights = attention_weights.squeeze(1)  # [batch_size, num_patches]
+        
+        return aggregated_features, attention_weights
+    
+    def encode_augmentation_type(self, aug_string):
+        """Convert augmentation string to index"""
+        return self.augmentation_to_idx.get(aug_string, self.augmentation_to_idx['original'])
+
 class PrimaryCapsules(nn.Module):
     """Primary Capsules Layer - Extracts local spatial features"""
     
@@ -324,6 +439,94 @@ class CapsNetFeatureExtractor(nn.Module):
         
         return features, capsule_info
 
+class CapsNetWithAttentionPooling(nn.Module):
+    """
+    CapsNet with Attention Pooling for efficient patch aggregation.
+    
+    This model processes multiple patches from the same image and aggregates them
+    into a single representation using learned attention weights.
+    """
+    
+    def __init__(self, input_channels=3, input_size=256, feature_dim=128, 
+                 num_primary_capsules=8, primary_capsule_dim=32, 
+                 num_digit_capsules=10, digit_capsule_dim=16, 
+                 dropout_rate=0.3, attention_heads=4, max_patches=100, **kwargs):
+        super(CapsNetWithAttentionPooling, self).__init__()
+        
+        # Base CapsNet feature extractor (processes individual patches)
+        self.patch_feature_extractor = CapsNetFeatureExtractor(
+            input_channels=input_channels,
+            input_size=input_size,
+            feature_dim=feature_dim,
+            num_primary_capsules=num_primary_capsules,
+            primary_capsule_dim=primary_capsule_dim,
+            num_digit_capsules=num_digit_capsules,
+            digit_capsule_dim=digit_capsule_dim,
+            dropout_rate=dropout_rate,
+            **kwargs
+        )
+        
+        # Attention pooling module for patch aggregation
+        self.attention_pooling = AttentionPooling(
+            feature_dim=feature_dim,
+            hidden_dim=feature_dim // 2,
+            num_heads=attention_heads,
+            max_patches=max_patches
+        )
+        
+        print(f"CapsNet with Attention Pooling:")
+        print(f"  Patch feature extractor: {feature_dim}D features per patch")
+        print(f"  Attention pooling: {attention_heads} heads, max {max_patches} patches")
+        print(f"  Spatial encoding: Positional + Augmentation embeddings")
+        print(f"  Final output: {feature_dim}D aggregated features")
+    
+    def forward(self, patch_batch, patch_indices=None, augmentation_types=None, patch_mask=None):
+        """
+        Forward pass for multiple patches from the same image/day
+        
+        Args:
+            patch_batch: [batch_size, num_patches, channels, height, width]
+            patch_indices: [batch_size, num_patches] - spatial patch indices from metadata
+            augmentation_types: [batch_size, num_patches] - augmentation type indices
+            patch_mask: [batch_size, num_patches] - mask for valid patches (optional)
+            
+        Returns:
+            aggregated_features: [batch_size, feature_dim]
+            attention_weights: [batch_size, num_patches] - learned attention weights
+        """
+        batch_size, num_patches, channels, height, width = patch_batch.shape
+        
+        # Reshape to process all patches at once
+        # [batch_size * num_patches, channels, height, width]
+        patches_flat = patch_batch.view(-1, channels, height, width)
+        
+        # Extract features for all patches
+        # [batch_size * num_patches, feature_dim]
+        patch_features_flat = self.patch_feature_extractor(patches_flat)
+        
+        # Reshape back to separate patches
+        # [batch_size, num_patches, feature_dim]
+        patch_features = patch_features_flat.view(batch_size, num_patches, -1)
+        
+        # Apply attention pooling to aggregate patches with spatial information
+        aggregated_features, attention_weights = self.attention_pooling(
+            patch_features, patch_indices, augmentation_types, patch_mask
+        )
+        
+        return aggregated_features, attention_weights
+
+    def forward_single_patches(self, x):
+        """
+        Forward pass for individual patches (backward compatibility)
+        
+        Args:
+            x: [batch_size, channels, height, width]
+            
+        Returns:
+            features: [batch_size, feature_dim]
+        """
+        return self.patch_feature_extractor(x)
+
 def create_capsnet_feature_extractor(input_channels=3, input_size=256, feature_dim=128, **kwargs):
     """
     Create a CapsNet feature extractor
@@ -338,6 +541,26 @@ def create_capsnet_feature_extractor(input_channels=3, input_size=256, feature_d
         CapsNet model configured for spatial feature extraction
     """
     return CapsNetFeatureExtractor(
+        input_channels=input_channels,
+        input_size=input_size,
+        feature_dim=feature_dim,
+        **kwargs
+    )
+
+def create_capsnet_with_attention_pooling(input_channels=3, input_size=256, feature_dim=128, **kwargs):
+    """
+    Create a CapsNet with attention pooling for patch aggregation
+    
+    Args:
+        input_channels: Number of input channels (3 for RGB)
+        input_size: Input image size (256x256)
+        feature_dim: Final feature dimension (128)
+        **kwargs: Additional hyperparameters
+        
+    Returns:
+        CapsNet model with attention pooling for efficient patch processing
+    """
+    return CapsNetWithAttentionPooling(
         input_channels=input_channels,
         input_size=input_size,
         feature_dim=feature_dim,

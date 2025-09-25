@@ -520,7 +520,8 @@ class TrunkAirQualityDataset(Dataset):
 class CapsNetTrainer:
     """Complete CapsNet Trainer with training, testing, and hyperparameter tuning"""
     
-    def __init__(self, input_size=256, feature_dim=128, device='cuda', model_type='capsnet'):
+    def __init__(self, input_size=256, feature_dim=128, device='cuda', model_type='capsnet', 
+                 use_attention_pooling=False, max_patches_per_image=50, attention_heads=4):
         if torch.cuda.is_available():
             try:
                 self.device = torch.device(device)   # e.g., "cuda:0"
@@ -532,15 +533,28 @@ class CapsNetTrainer:
 
         self.input_size = input_size
         self.feature_dim = feature_dim
-        self.model_type = model_type
+        
+        self.use_attention_pooling = use_attention_pooling
+        self.max_patches_per_image = max_patches_per_image
+        self.attention_heads = attention_heads
+        
+        # Automatically set model type for attention pooling
+        if use_attention_pooling:
+            self.model_type = 'capsnet_with_attention_pooling'
+        else:
+            self.model_type = model_type
         
         # Initialize output manager
-        self.output_manager = OutputManager(model_type=model_type)
+        self.output_manager = OutputManager(model_type=self.model_type)
         
         print(f"🚀 CapsNet Trainer")
         print(f"   Device: {self.device}")
         print(f"   Input size: {input_size}x{input_size}")
         print(f"   Feature dimension: {feature_dim}")
+        if use_attention_pooling:
+            print(f"   Attention pooling: Enabled")
+            print(f"   Max patches per image: {max_patches_per_image}")
+            print(f"   Attention heads: {attention_heads}")
         
         # Initialize model
         self.feature_extractor = None
