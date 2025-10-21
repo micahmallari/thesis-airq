@@ -1,1 +1,13 @@
-null
+{
+  "hidden_size": 64,
+  "num_layers": 2,
+  "dropout": 0.2,
+  "activation": "gelu",
+  "learning_rate": 0.0001,
+  "batch_size": 64,
+  "epochs": 50,
+  "timesteps": 30,
+  "weight_decay": 0.0001,
+  "grad_clip": 0.5,
+  "lstm_dropout": 0.0
+}

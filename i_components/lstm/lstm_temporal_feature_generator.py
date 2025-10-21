@@ -13,10 +13,6 @@ import time
 from itertools import product
 
 class LSTMTemporalFeatureExtractor(nn.Module):
-    """
-    LSTM component for hybrid models that produces 32-dimensional temporal features
-    Compatible with: CapsNet-LSTM-LightGBM, CNN-LSTM-LightGBM, CapsNet-LSTM
-    """
     def __init__(self, input_size, hidden_size=64, num_layers=1, dropout=0.2, 
                  activation='relu', lstm_dropout=0.0):
         super(LSTMTemporalFeatureExtractor, self).__init__()
@@ -51,18 +47,6 @@ class LSTMTemporalFeatureExtractor(nn.Module):
         self.prediction_layer = nn.Linear(32, 1)
         
     def forward(self, x, return_features_only=False):
-        """
-        Forward pass with option to return only temporal features or full prediction
-        
-        Args:
-            x: Input sequences (batch_size, seq_len, features)
-            return_features_only: If True, returns only 32-dim temporal features
-                                If False, returns both features and prediction
-        
-        Returns:
-            temporal_features: 32-dimensional temporal features for hybrid models
-            prediction: PM2.5 prediction (only if return_features_only=False)
-        """
         # LSTM forward pass
         lstm_out, (hn, cn) = self.lstm(x)
         last_output = lstm_out[:, -1, :]  # Use last timestep output
@@ -79,12 +63,7 @@ class LSTMTemporalFeatureExtractor(nn.Module):
             return temporal_features, prediction
 
 class LSTMTemporalFeatureGenerator:
-    """
-    LSTM component for temporal feature extraction in hybrid models
-    Designed to work within full pipeline cross-validation
-    """
     def __init__(self, best_params=None):
-        # Default hyperparameters (should be determined through separate tuning)
         self.default_params = {
             'hidden_size': 64,
             'num_layers': 1,
@@ -124,33 +103,17 @@ class LSTMTemporalFeatureGenerator:
         return np.array(X), np.array(y)
     
     def train_and_extract_features(self, train_temporal_data, train_targets, val_temporal_data, val_targets, timesteps=None):
-        """
-        Train LSTM and extract temporal features for current CV fold
-        This is called by the full pipeline during each fold
-        
-        IMPORTANT: val_temporal_data is validation data from the 80% learning set,
-                   NOT the 20% hold-out test set (to prevent data leakage)
-        
-        Returns:
-            train_features: 32D temporal features for training data
-            val_features: 32D temporal features for validation data (within learning set)
-        """
-        # Use timesteps from params or default
         if timesteps is None:
             timesteps = self.params.get('timesteps', 60)
             
-        # Prepare sequences for training
         X_train, y_train = self.prepare_temporal_sequences(train_temporal_data, train_targets, timesteps)
         
-        # Convert to tensors
         X_train_tensor = torch.FloatTensor(X_train)
         y_train_tensor = torch.FloatTensor(y_train).unsqueeze(1)
         
-        # Create data loader
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
         train_loader = DataLoader(train_dataset, batch_size=self.params['batch_size'], shuffle=True)
         
-        # Initialize LSTM model
         self.model = LSTMTemporalFeatureExtractor(
             input_size=train_temporal_data.shape[1],
             hidden_size=self.params['hidden_size'],
@@ -191,14 +154,14 @@ class LSTMTemporalFeatureGenerator:
         with torch.no_grad():
             train_features = self.model(X_train_tensor, return_features_only=True).numpy()
         
-        # Prepare test sequences and extract features
+   
         X_val, _ = self.prepare_temporal_sequences(val_temporal_data, val_targets, timesteps)
         X_val_tensor = torch.FloatTensor(X_val)
         
         with torch.no_grad():
             val_features = self.model(X_val_tensor, return_features_only=True).numpy()
         
-        # Debug: Verify numpy arrays are generated correctly
+      
         print(f"  LSTM Debug - Train features shape: {train_features.shape}, type: {type(train_features)}")
         print(f"  LSTM Debug - Val features shape: {val_features.shape}, type: {type(val_features)}")
         print(f"  LSTM Debug - Feature sample: {train_features[0][:5]}...")  # First 5 values
@@ -206,19 +169,13 @@ class LSTMTemporalFeatureGenerator:
         return train_features, val_features, y_train, X_val.shape[0]
     
 class TemporalDataLoader:
-    """
-    Data loader for temporal features across all days
-    Supports full pipeline cross-validation
-    """
+
     def __init__(self, days=['7_24', '10_19', '11_10']):
         self.days = days
         self.temporal_features = ['pm10', 'temperature', 'humidity']
     
     def load_temporal_data(self, day):
-        """
-        Load temporal data for a specific day
-        Returns raw temporal data and targets for CV splitting
-        """
+
         matched_file = f'dataset/c_matched_spatio_temporal_data/matched_{day}.csv'
         if not os.path.exists(matched_file):
             raise FileNotFoundError(f"Matched data not found: {matched_file}")
@@ -244,19 +201,11 @@ class TemporalDataLoader:
         
         return temporal_data, targets, available_features
 
-def hyperparameter_tuning_lstm(day, max_combinations=1):
-    """
-    Separate hyperparameter tuning for LSTM component
-    This should be run once per day to find optimal parameters
-    
-    IMPORTANT: Uses only the 80% learning set for tuning
-    The 20% hold-out test set remains completely untouched
-    
-    This is SEPARATE from the 5-fold CV - it's just for finding best LSTM params
-    """
+def hyperparameter_tuning_lstm(day, max_combinations=30):
+
     hyperparameter_space = {
         # LSTM Architecture
-        'hidden_size': [32, 64, 128, 256],           # More options for LSTM capacity
+        'hidden_size': [32, 64, 128, 256],           # More options for LSTM 
         'num_layers': [1, 2, 3],                     # Try deeper networks
         'dropout': [0.1, 0.2, 0.3, 0.4],           # Regularization strength
         'activation': ['relu', 'tanh', 'gelu'],      # Different activation functions
@@ -264,7 +213,7 @@ def hyperparameter_tuning_lstm(day, max_combinations=1):
         # Training Parameters
         'learning_rate': [0.0001, 0.001, 0.01],     # Learning rate range
         'batch_size': [16, 32, 64],                  # Batch size options
-        'epochs': [10, 30, 50],                     # Proper training duration
+        'epochs': [30, 50],                     # Proper training duration
         
         # Sequence Parameters
         'timesteps': [10, 30, 40, 60],               # Sequence length for temporal patterns
@@ -284,21 +233,18 @@ def hyperparameter_tuning_lstm(day, max_combinations=1):
     data_loader = TemporalDataLoader()
     temporal_data, targets, feature_names = data_loader.load_temporal_data(day)
     
-    # CRITICAL: Use only the 80% learning set for hyperparameter tuning
-    # The 20% hold-out test set remains completely untouched
     n_total = len(temporal_data)
     n_learning = int(n_total * 0.8)  # Only use 80% learning set
     
     learning_temporal = temporal_data[:n_learning]  # 80% learning set only
     learning_targets = targets[:n_learning]
     
-    # For hyperparameter tuning, split the 80% learning set into 64% train, 16% val
-    # This is DIFFERENT from the 5-fold CV splits
-    n_tune_train = int(n_learning * 0.8)  # 64% of total (80% of 80%)
+
+    n_tune_train = int(n_learning * 0.8) 
     
-    tune_train_temporal = learning_temporal[:n_tune_train]       # 64% of total
+    tune_train_temporal = learning_temporal[:n_tune_train]      
     tune_train_targets = learning_targets[:n_tune_train]
-    tune_val_temporal = learning_temporal[n_tune_train:]         # 16% of total
+    tune_val_temporal = learning_temporal[n_tune_train:]        
     tune_val_targets = learning_targets[n_tune_train:]
     
     print(f"Data split for hyperparameter tuning (separate from 5-fold CV):")
@@ -330,20 +276,20 @@ def hyperparameter_tuning_lstm(day, max_combinations=1):
     for i, params in enumerate(param_combinations):
         print(f"  Testing combination {i+1}/{len(param_combinations)}: {params}")
         
-        # Create LSTM generator with current params
+       
         lstm_gen = LSTMTemporalFeatureGenerator(params)
         
         try:
-            # Train and get validation features (using only learning set)
+          
             train_features, val_features, train_y, val_len = lstm_gen.train_and_extract_features(
                 tune_train_temporal, tune_train_targets, tune_val_temporal, tune_val_targets, 
                 timesteps=params.get('timesteps', 60)
             )
             
-            # Simple validation: predict using temporal features
-            val_y = tune_val_targets[params.get('timesteps', 60):]  # Account for sequence length
+           
+            val_y = tune_val_targets[params.get('timesteps', 60):]  
             if len(val_y) == len(val_features):
-                # Use simple linear regression for validation
+                
                 from sklearn.linear_model import LinearRegression
                 lr = LinearRegression()
                 lr.fit(train_features, train_y)
@@ -397,7 +343,7 @@ def main():
     for day in days:
         try:
             print(f"\nTuning LSTM parameters for {day}...")
-            best_params = hyperparameter_tuning_lstm(day, max_combinations=1)
+            best_params = hyperparameter_tuning_lstm(day, max_combinations=30)
             print(f" {day} tuning complete")
             
         except Exception as e:
