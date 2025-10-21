@@ -1,0 +1,8 @@
+{
+  "learning_rate": 0.01,
+  "dropout_rate": 0.4659969709057026,
+  "feature_dim": 64,
+  "optimizer_type": "adam",
+  "weight_decay": 0.01,
+  "batch_size": 4
+}

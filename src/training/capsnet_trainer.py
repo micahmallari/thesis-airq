@@ -1125,13 +1125,24 @@ class CapsNetTrainer:
             try:
                 # Suggest basic hyperparameters
                 learning_rate = trial.suggest_categorical('learning_rate', [0.001, 0.01])
-                dropout_rate = trial.suggest_float('dropout_rate', 0.1, 0.6)
+                dropout_rate = trial.suggest_categorical('dropout_rate', [0.2, 0.3, 0.4, 0.5])
                 feature_dim = trial.suggest_categorical('feature_dim', [64, 128, 256, 512])
                 optimizer_type = trial.suggest_categorical('optimizer_type', ['adam', 'adamw'])
                 weight_decay = trial.suggest_categorical('weight_decay', [0.0001, 0.001, 0.01])
                 batch_size_trial = trial.suggest_categorical('batch_size', [4, 8, 16, 32])
                 # Print hyperparameters for this trial
                 print(f"Hyperparameters: lr={learning_rate}, dropout={dropout_rate}, feature_dim={feature_dim}, opt={optimizer_type}, wd={weight_decay}, batch={batch_size_trial}")
+                # Save trial parameters to a JSON file per trial
+                trial_dir = self.output_manager.get_path('experiments', 'trials', day_folder=day_folder)
+                os.makedirs(trial_dir, exist_ok=True)
+                trial_param_path = os.path.join(trial_dir, f"trial_{trial.number + 1}_params.json")
+                with open(trial_param_path, 'w') as f:
+                    json.dump({
+                        'trial_number': trial.number + 1,
+                        'params': trial.params,
+                        'datetime': datetime.now().isoformat()
+                    }, f, indent=2)
+                print(f"[Optuna] Trial {trial.number + 1} parameters saved to {trial_param_path}")
                 # Create model with suggested parameters (always use simplified for tuning)
                 self.feature_dim = feature_dim
                 self.create_model(use_simplified=True, dropout_rate=dropout_rate)

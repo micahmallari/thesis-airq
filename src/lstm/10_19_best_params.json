@@ -1,0 +1,13 @@
+{
+  "hidden_size": 32,
+  "num_layers": 3,
+  "dropout": 0.1,
+  "activation": "relu",
+  "learning_rate": 0.001274651111817904,
+  "batch_size": 32,
+  "epochs": 30,
+  "timesteps": 40,
+  "weight_decay": 1e-05,
+  "grad_clip": 1.0,
+  "lstm_dropout": 0.2
+}

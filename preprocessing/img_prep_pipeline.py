@@ -31,7 +31,7 @@ def process_day(day_folder, patch_meta):
         return
     patch_out_dir = os.path.join(OUTPUT_ROOT, day_folder, 'patch')
     os.makedirs(patch_out_dir, exist_ok=True)
-    MAX_PATCHES_PER_IMAGE = 50  # Change this value as needed
+    MAX_PATCHES_PER_IMAGE = 25  # Change this value as needed
     import random
     for fname in sorted(os.listdir(img_dir)):
         name, ext = os.path.splitext(fname)
