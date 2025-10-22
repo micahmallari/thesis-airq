@@ -141,7 +141,8 @@ class TemporalDataLoader:
         self.days = days
         self.temporal_features = ['pm10', 'temperature', 'humidity']
     def load_temporal_data(self, day):
-        matched_file = f'../../dataset/c_matched_spatio_temporal_data/matched_{day}.csv'
+        # Use path relative to workspace root
+        matched_file = f'dataset/c_matched_spatio_temporal_data/matched_{day}.csv'
         if not os.path.exists(matched_file):
             raise FileNotFoundError(f"Matched data not found: {matched_file}")
         df = pd.read_csv(matched_file)
