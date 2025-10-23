@@ -4,7 +4,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from training.capsnet_trainer import CapsNetTrainer, OutputManager
+from training.capsnet_trainer import CapsNetTrainer, OutputManager, AirQualityDataset
 from models.cnn_baseline import create_cnn_baseline
 import torch.nn as nn
 
@@ -58,3 +58,6 @@ def create_cnn_trainer(backbone='resnet50', input_size=256, feature_dim=128, dev
         backbone=backbone,
         **kwargs
     )
+
+# Create alias for compatibility
+CNNTrainer = CNNBaselineTrainer
