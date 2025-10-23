@@ -136,6 +136,120 @@ class LSTMTemporalFeatureGenerator:
         print(f"  LSTM Debug - Feature sample: {train_features[0][:5]}...")
         return train_features, val_features, y_train, X_val.shape[0]
 
+    def train_model(self, train_temporal_data, train_targets, val_temporal_data, val_targets, epochs=None, timesteps=None):
+        """
+        Train LSTM model (training only, no feature extraction)
+        Compatible with pipeline pattern: separate training and extraction
+        """
+        if epochs is not None:
+            self.params['epochs'] = epochs
+        if timesteps is None:
+            timesteps = self.params.get('timesteps', 60)
+        
+        # Prepare sequences
+        X_train, y_train = self.prepare_temporal_sequences(train_temporal_data, train_targets, timesteps)
+        X_train_tensor = torch.FloatTensor(X_train)
+        y_train_tensor = torch.FloatTensor(y_train).unsqueeze(1)
+        
+        train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+        train_loader = DataLoader(train_dataset, batch_size=self.params['batch_size'], shuffle=True)
+        
+        # Initialize model
+        self.model = LSTMTemporalFeatureExtractor(
+            input_size=train_temporal_data.shape[1],
+            hidden_size=self.params['hidden_size'],
+            num_layers=self.params['num_layers'],
+            dropout=self.params['dropout'],
+            activation=self.params['activation'],
+            lstm_dropout=self.params.get('lstm_dropout', 0.0)
+        )
+        
+        criterion = nn.MSELoss()
+        optimizer = optim.Adam(
+            self.model.parameters(),
+            lr=self.params['learning_rate'],
+            weight_decay=self.params.get('weight_decay', 0.0)
+        )
+        
+        # Training loop
+        self.model.train()
+        for epoch in range(self.params['epochs']):
+            total_loss = 0
+            for batch_X, batch_y in train_loader:
+                optimizer.zero_grad()
+                _, predictions = self.model(batch_X, return_features_only=False)
+                loss = criterion(predictions, batch_y)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(),
+                    max_norm=self.params.get('grad_clip', 1.0)
+                )
+                optimizer.step()
+                total_loss += loss.item()
+        
+        print(f"  LSTM training completed: {self.params['epochs']} epochs")
+        return self.model
+
+    def save_model(self, model_path):
+        """Save trained LSTM model to file"""
+        if self.model is None:
+            raise ValueError("No model to save. Train the model first.")
+        
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'params': self.params,
+            'scaler': self.scaler
+        }, model_path)
+        print(f"  LSTM model saved to: {model_path}")
+
+    def load_model(self, model_path):
+        """Load trained LSTM model from file"""
+        checkpoint = torch.load(model_path)
+        self.params = checkpoint['params']
+        self.scaler = checkpoint['scaler']
+        
+        # Reconstruct model architecture (need input_size)
+        # We'll get this from the first layer of the saved model
+        saved_state = checkpoint['model_state_dict']
+        input_size = saved_state['lstm.weight_ih_l0'].shape[1]
+        
+        self.model = LSTMTemporalFeatureExtractor(
+            input_size=input_size,
+            hidden_size=self.params['hidden_size'],
+            num_layers=self.params['num_layers'],
+            dropout=self.params['dropout'],
+            activation=self.params['activation'],
+            lstm_dropout=self.params.get('lstm_dropout', 0.0)
+        )
+        
+        self.model.load_state_dict(saved_state)
+        self.model.eval()
+        print(f"  LSTM model loaded from: {model_path}")
+
+    def extract_features(self, temporal_data, timesteps=None):
+        """
+        Extract features from trained LSTM model
+        Compatible with pipeline pattern: separate training and extraction
+        """
+        if self.model is None:
+            raise ValueError("No trained model found. Load or train a model first.")
+        
+        if timesteps is None:
+            timesteps = self.params.get('timesteps', 60)
+        
+        # Prepare sequences (dummy targets since we only need features)
+        dummy_targets = np.zeros(len(temporal_data))
+        X, _ = self.prepare_temporal_sequences(temporal_data, dummy_targets, timesteps)
+        X_tensor = torch.FloatTensor(X)
+        
+        # Extract features
+        self.model.eval()
+        with torch.no_grad():
+            features = self.model(X_tensor, return_features_only=True).numpy()
+        
+        print(f"  LSTM features extracted: shape {features.shape}")
+        return features
+
 class TemporalDataLoader:
     def __init__(self, days=['10_19', '11_10', '7_24']):
         self.days = days

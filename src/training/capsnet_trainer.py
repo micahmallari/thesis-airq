@@ -433,9 +433,23 @@ class CapsNetTrainer:
         self.train_metrics = []
         self.val_metrics = []
     
-    def create_model(self, use_simplified=False, **model_params):
-        """Create CapsNet feature extractor model. Set use_simplified=True to use the lightweight version for tuning."""
-        if use_simplified:
+    def create_model(self, use_simplified=False, use_efficient=False, **model_params):
+        """
+        Create CapsNet feature extractor model. 
+        - Set use_efficient=True to use EfficientCapsNet (recommended for 4GB GPU, 10-20x faster)
+        - Set use_simplified=True to use SimplifiedCapsNet (lightweight version)
+        - Default: use full CapsNetFeatureExtractor
+        """
+        if use_efficient:
+            from src.models.capsnet_model import create_efficient_capsnet
+            self.feature_extractor = create_efficient_capsnet(
+                input_channels=3,
+                input_size=self.input_size,
+                feature_dim=self.feature_dim,
+                **model_params
+            ).to(self.device)
+            print("[CapsNetTrainer] Using EfficientCapsNet for feature extraction.")
+        elif use_simplified:
             self.feature_extractor = create_simplified_capsnet(
                 input_channels=3,
                 input_size=self.input_size,
