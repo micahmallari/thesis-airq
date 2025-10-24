@@ -771,9 +771,7 @@ class CapsNetTrainer:
         self.train_metrics = []
         self.val_metrics = []
         
-        # Training loop
-        batch_images = batch_images.to(self.device)
-        batch_targets = batch_targets.to(self.device)
+        # Training loop setup
         best_val_loss = float('inf')
         patience_counter = 0
         patience = training_params.get('early_stopping_patience', 10)
