@@ -1,0 +1,25 @@
+{
+  "timestamp": "20251024_125526",
+  "model_type": "capsnet",
+  "day_folder": "7_24_data_fold_1",
+  "config": {
+    "epochs": 5,
+    "batch_size": 4,
+    "training_samples": 84760,
+    "validation_samples": 84770,
+    "feature_dim": 64,
+    "input_size": 256,
+    "device": "cpu"
+  },
+  "output_structure": {
+    "models": "outputs/capsnet/models",
+    "features": "outputs/capsnet/features",
+    "plots": "outputs/capsnet/plots",
+    "logs": "outputs/capsnet/logs",
+    "checkpoints": "outputs/capsnet/checkpoints",
+    "hyperparameters": "outputs/capsnet/hyperparameters",
+    "metadata": "outputs/capsnet/metadata",
+    "experiments": "outputs/capsnet/experiments",
+    "tuning": "outputs/capsnet/tuning"
+  }
+}

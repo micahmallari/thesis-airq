@@ -1977,6 +1977,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,162506.JPG,0,none,7_24_data\patch\162506_p0_none.npy
 7_24_data,162506.JPG,1,none,7_24_data\patch\162506_p1_none.npy
 7_24_data,162506.JPG,2,none,7_24_data\patch\162506_p2_none.npy
+7_24_data,162506.JPG,3,none,7_24_data\patch\162506_p3_none.npy
 7_24_data,162506.JPG,4,none,7_24_data\patch\162506_p4_none.npy
 7_24_data,162506.JPG,5,none,7_24_data\patch\162506_p5_none.npy
 7_24_data,162506.JPG,6,none,7_24_data\patch\162506_p6_none.npy
@@ -2002,16 +2003,17 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,162524.JPG,1,none,7_24_data\patch\162524_p1_none.npy
 7_24_data,162524.JPG,2,none,7_24_data\patch\162524_p2_none.npy
 7_24_data,162524.JPG,3,none,7_24_data\patch\162524_p3_none.npy
+7_24_data,162524.JPG,4,none,7_24_data\patch\162524_p4_none.npy
 7_24_data,162524.JPG,5,none,7_24_data\patch\162524_p5_none.npy
 7_24_data,162524.JPG,6,none,7_24_data\patch\162524_p6_none.npy
-7_24_data,162524.JPG,7,none,7_24_data\patch\162524_p7_none.npy
+7_24_data,162524.JPG,8,none,7_24_data\patch\162524_p8_none.npy
 7_24_data,162524.JPG,9,none,7_24_data\patch\162524_p9_none.npy
 7_24_data,162524.JPG,10,none,7_24_data\patch\162524_p10_none.npy
+7_24_data,162524.JPG,11,none,7_24_data\patch\162524_p11_none.npy
 7_24_data,162524.JPG,12,none,7_24_data\patch\162524_p12_none.npy
 7_24_data,162524.JPG,13,none,7_24_data\patch\162524_p13_none.npy
 7_24_data,162524.JPG,14,none,7_24_data\patch\162524_p14_none.npy
 7_24_data,162524.JPG,15,none,7_24_data\patch\162524_p15_none.npy
-7_24_data,162524.JPG,16,none,7_24_data\patch\162524_p16_none.npy
 7_24_data,162524.JPG,17,none,7_24_data\patch\162524_p17_none.npy
 7_24_data,162524.JPG,18,none,7_24_data\patch\162524_p18_none.npy
 7_24_data,162524.JPG,19,none,7_24_data\patch\162524_p19_none.npy
@@ -2141,6 +2143,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,162808.JPG,18,none,7_24_data\patch\162808_p18_none.npy
 7_24_data,162808.JPG,19,none,7_24_data\patch\162808_p19_none.npy
 7_24_data,162808.JPG,20,none,7_24_data\patch\162808_p20_none.npy
+7_24_data,162808.JPG,21,none,7_24_data\patch\162808_p21_none.npy
 7_24_data,162808.JPG,22,none,7_24_data\patch\162808_p22_none.npy
 7_24_data,162808.JPG,23,none,7_24_data\patch\162808_p23_none.npy
 7_24_data,162808.JPG,24,none,7_24_data\patch\162808_p24_none.npy
@@ -2178,7 +2181,6 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170228.JPG,6,none,7_24_data\patch\170228_p6_none.npy
 7_24_data,170228.JPG,7,none,7_24_data\patch\170228_p7_none.npy
 7_24_data,170228.JPG,8,none,7_24_data\patch\170228_p8_none.npy
-7_24_data,170228.JPG,9,none,7_24_data\patch\170228_p9_none.npy
 7_24_data,170228.JPG,10,none,7_24_data\patch\170228_p10_none.npy
 7_24_data,170228.JPG,11,none,7_24_data\patch\170228_p11_none.npy
 7_24_data,170228.JPG,12,none,7_24_data\patch\170228_p12_none.npy
@@ -2196,8 +2198,8 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170228.JPG,24,none,7_24_data\patch\170228_p24_none.npy
 7_24_data,170238.JPG,0,none,7_24_data\patch\170238_p0_none.npy
 7_24_data,170238.JPG,1,none,7_24_data\patch\170238_p1_none.npy
-7_24_data,170238.JPG,2,none,7_24_data\patch\170238_p2_none.npy
 7_24_data,170238.JPG,3,none,7_24_data\patch\170238_p3_none.npy
+7_24_data,170238.JPG,4,none,7_24_data\patch\170238_p4_none.npy
 7_24_data,170238.JPG,5,none,7_24_data\patch\170238_p5_none.npy
 7_24_data,170238.JPG,6,none,7_24_data\patch\170238_p6_none.npy
 7_24_data,170238.JPG,7,none,7_24_data\patch\170238_p7_none.npy
@@ -2214,8 +2216,10 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170238.JPG,18,none,7_24_data\patch\170238_p18_none.npy
 7_24_data,170238.JPG,19,none,7_24_data\patch\170238_p19_none.npy
 7_24_data,170238.JPG,20,none,7_24_data\patch\170238_p20_none.npy
+7_24_data,170238.JPG,21,none,7_24_data\patch\170238_p21_none.npy
 7_24_data,170238.JPG,22,none,7_24_data\patch\170238_p22_none.npy
-7_24_data,170238.JPG,23,none,7_24_data\patch\170238_p23_none.npy
+7_24_data,170238.JPG,24,none,7_24_data\patch\170238_p24_none.npy
+7_24_data,170256.JPG,0,none,7_24_data\patch\170256_p0_none.npy
 7_24_data,170256.JPG,1,none,7_24_data\patch\170256_p1_none.npy
 7_24_data,170256.JPG,2,none,7_24_data\patch\170256_p2_none.npy
 7_24_data,170256.JPG,3,none,7_24_data\patch\170256_p3_none.npy
@@ -2225,21 +2229,22 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170256.JPG,7,none,7_24_data\patch\170256_p7_none.npy
 7_24_data,170256.JPG,8,none,7_24_data\patch\170256_p8_none.npy
 7_24_data,170256.JPG,9,none,7_24_data\patch\170256_p9_none.npy
+7_24_data,170256.JPG,10,none,7_24_data\patch\170256_p10_none.npy
 7_24_data,170256.JPG,11,none,7_24_data\patch\170256_p11_none.npy
+7_24_data,170256.JPG,12,none,7_24_data\patch\170256_p12_none.npy
+7_24_data,170256.JPG,13,none,7_24_data\patch\170256_p13_none.npy
 7_24_data,170256.JPG,14,none,7_24_data\patch\170256_p14_none.npy
-7_24_data,170256.JPG,15,none,7_24_data\patch\170256_p15_none.npy
 7_24_data,170256.JPG,16,none,7_24_data\patch\170256_p16_none.npy
-7_24_data,170256.JPG,17,none,7_24_data\patch\170256_p17_none.npy
 7_24_data,170256.JPG,18,none,7_24_data\patch\170256_p18_none.npy
 7_24_data,170256.JPG,19,none,7_24_data\patch\170256_p19_none.npy
-7_24_data,170256.JPG,20,none,7_24_data\patch\170256_p20_none.npy
 7_24_data,170256.JPG,21,none,7_24_data\patch\170256_p21_none.npy
 7_24_data,170256.JPG,22,none,7_24_data\patch\170256_p22_none.npy
 7_24_data,170256.JPG,23,none,7_24_data\patch\170256_p23_none.npy
 7_24_data,170256.JPG,24,none,7_24_data\patch\170256_p24_none.npy
 7_24_data,170300.JPG,0,none,7_24_data\patch\170300_p0_none.npy
-7_24_data,170300.JPG,1,none,7_24_data\patch\170300_p1_none.npy
+7_24_data,170300.JPG,2,none,7_24_data\patch\170300_p2_none.npy
 7_24_data,170300.JPG,3,none,7_24_data\patch\170300_p3_none.npy
+7_24_data,170300.JPG,4,none,7_24_data\patch\170300_p4_none.npy
 7_24_data,170300.JPG,5,none,7_24_data\patch\170300_p5_none.npy
 7_24_data,170300.JPG,6,none,7_24_data\patch\170300_p6_none.npy
 7_24_data,170300.JPG,7,none,7_24_data\patch\170300_p7_none.npy
@@ -2250,6 +2255,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170300.JPG,12,none,7_24_data\patch\170300_p12_none.npy
 7_24_data,170300.JPG,13,none,7_24_data\patch\170300_p13_none.npy
 7_24_data,170300.JPG,14,none,7_24_data\patch\170300_p14_none.npy
+7_24_data,170300.JPG,15,none,7_24_data\patch\170300_p15_none.npy
 7_24_data,170300.JPG,16,none,7_24_data\patch\170300_p16_none.npy
 7_24_data,170300.JPG,17,none,7_24_data\patch\170300_p17_none.npy
 7_24_data,170300.JPG,18,none,7_24_data\patch\170300_p18_none.npy
@@ -2259,6 +2265,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170300.JPG,22,none,7_24_data\patch\170300_p22_none.npy
 7_24_data,170300.JPG,23,none,7_24_data\patch\170300_p23_none.npy
 7_24_data,170300.JPG,24,none,7_24_data\patch\170300_p24_none.npy
+7_24_data,170316.JPG,0,none,7_24_data\patch\170316_p0_none.npy
 7_24_data,170316.JPG,1,none,7_24_data\patch\170316_p1_none.npy
 7_24_data,170316.JPG,2,none,7_24_data\patch\170316_p2_none.npy
 7_24_data,170316.JPG,3,none,7_24_data\patch\170316_p3_none.npy
@@ -2274,6 +2281,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170316.JPG,13,none,7_24_data\patch\170316_p13_none.npy
 7_24_data,170316.JPG,14,none,7_24_data\patch\170316_p14_none.npy
 7_24_data,170316.JPG,15,none,7_24_data\patch\170316_p15_none.npy
+7_24_data,170316.JPG,16,none,7_24_data\patch\170316_p16_none.npy
 7_24_data,170316.JPG,17,none,7_24_data\patch\170316_p17_none.npy
 7_24_data,170316.JPG,18,none,7_24_data\patch\170316_p18_none.npy
 7_24_data,170316.JPG,19,none,7_24_data\patch\170316_p19_none.npy
@@ -2295,7 +2303,6 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170400.JPG,10,none,7_24_data\patch\170400_p10_none.npy
 7_24_data,170400.JPG,11,none,7_24_data\patch\170400_p11_none.npy
 7_24_data,170400.JPG,12,none,7_24_data\patch\170400_p12_none.npy
-7_24_data,170400.JPG,13,none,7_24_data\patch\170400_p13_none.npy
 7_24_data,170400.JPG,14,none,7_24_data\patch\170400_p14_none.npy
 7_24_data,170400.JPG,15,none,7_24_data\patch\170400_p15_none.npy
 7_24_data,170400.JPG,16,none,7_24_data\patch\170400_p16_none.npy
@@ -2370,6 +2377,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170504.JPG,10,none,7_24_data\patch\170504_p10_none.npy
 7_24_data,170504.JPG,11,none,7_24_data\patch\170504_p11_none.npy
 7_24_data,170504.JPG,12,none,7_24_data\patch\170504_p12_none.npy
+7_24_data,170504.JPG,13,none,7_24_data\patch\170504_p13_none.npy
 7_24_data,170504.JPG,14,none,7_24_data\patch\170504_p14_none.npy
 7_24_data,170504.JPG,15,none,7_24_data\patch\170504_p15_none.npy
 7_24_data,170504.JPG,16,none,7_24_data\patch\170504_p16_none.npy
@@ -2448,7 +2456,9 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,170642.JPG,14,none,7_24_data\patch\170642_p14_none.npy
 7_24_data,170642.JPG,15,none,7_24_data\patch\170642_p15_none.npy
 7_24_data,170642.JPG,16,none,7_24_data\patch\170642_p16_none.npy
+7_24_data,170642.JPG,17,none,7_24_data\patch\170642_p17_none.npy
 7_24_data,170642.JPG,18,none,7_24_data\patch\170642_p18_none.npy
+7_24_data,170642.JPG,19,none,7_24_data\patch\170642_p19_none.npy
 7_24_data,170642.JPG,20,none,7_24_data\patch\170642_p20_none.npy
 7_24_data,170642.JPG,21,none,7_24_data\patch\170642_p21_none.npy
 7_24_data,170642.JPG,22,none,7_24_data\patch\170642_p22_none.npy
@@ -2460,6 +2470,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173514.JPG,3,none,7_24_data\patch\173514_p3_none.npy
 7_24_data,173514.JPG,4,none,7_24_data\patch\173514_p4_none.npy
 7_24_data,173514.JPG,5,none,7_24_data\patch\173514_p5_none.npy
+7_24_data,173514.JPG,6,none,7_24_data\patch\173514_p6_none.npy
 7_24_data,173514.JPG,7,none,7_24_data\patch\173514_p7_none.npy
 7_24_data,173514.JPG,8,none,7_24_data\patch\173514_p8_none.npy
 7_24_data,173514.JPG,9,none,7_24_data\patch\173514_p9_none.npy
@@ -2473,7 +2484,6 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173514.JPG,17,none,7_24_data\patch\173514_p17_none.npy
 7_24_data,173514.JPG,18,none,7_24_data\patch\173514_p18_none.npy
 7_24_data,173514.JPG,19,none,7_24_data\patch\173514_p19_none.npy
-7_24_data,173514.JPG,20,none,7_24_data\patch\173514_p20_none.npy
 7_24_data,173514.JPG,21,none,7_24_data\patch\173514_p21_none.npy
 7_24_data,173514.JPG,22,none,7_24_data\patch\173514_p22_none.npy
 7_24_data,173514.JPG,23,none,7_24_data\patch\173514_p23_none.npy
@@ -2502,6 +2512,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173534.JPG,21,none,7_24_data\patch\173534_p21_none.npy
 7_24_data,173534.JPG,22,none,7_24_data\patch\173534_p22_none.npy
 7_24_data,173534.JPG,23,none,7_24_data\patch\173534_p23_none.npy
+7_24_data,173534.JPG,24,none,7_24_data\patch\173534_p24_none.npy
 7_24_data,173554.JPG,0,none,7_24_data\patch\173554_p0_none.npy
 7_24_data,173554.JPG,1,none,7_24_data\patch\173554_p1_none.npy
 7_24_data,173554.JPG,2,none,7_24_data\patch\173554_p2_none.npy
@@ -2518,7 +2529,6 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173554.JPG,13,none,7_24_data\patch\173554_p13_none.npy
 7_24_data,173554.JPG,14,none,7_24_data\patch\173554_p14_none.npy
 7_24_data,173554.JPG,15,none,7_24_data\patch\173554_p15_none.npy
-7_24_data,173554.JPG,16,none,7_24_data\patch\173554_p16_none.npy
 7_24_data,173554.JPG,17,none,7_24_data\patch\173554_p17_none.npy
 7_24_data,173554.JPG,18,none,7_24_data\patch\173554_p18_none.npy
 7_24_data,173554.JPG,19,none,7_24_data\patch\173554_p19_none.npy
@@ -2540,9 +2550,10 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173620.JPG,10,none,7_24_data\patch\173620_p10_none.npy
 7_24_data,173620.JPG,11,none,7_24_data\patch\173620_p11_none.npy
 7_24_data,173620.JPG,12,none,7_24_data\patch\173620_p12_none.npy
-7_24_data,173620.JPG,13,none,7_24_data\patch\173620_p13_none.npy
 7_24_data,173620.JPG,14,none,7_24_data\patch\173620_p14_none.npy
 7_24_data,173620.JPG,15,none,7_24_data\patch\173620_p15_none.npy
+7_24_data,173620.JPG,16,none,7_24_data\patch\173620_p16_none.npy
+7_24_data,173620.JPG,17,none,7_24_data\patch\173620_p17_none.npy
 7_24_data,173620.JPG,18,none,7_24_data\patch\173620_p18_none.npy
 7_24_data,173620.JPG,19,none,7_24_data\patch\173620_p19_none.npy
 7_24_data,173620.JPG,20,none,7_24_data\patch\173620_p20_none.npy
@@ -2575,11 +2586,9 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173626.JPG,22,none,7_24_data\patch\173626_p22_none.npy
 7_24_data,173626.JPG,23,none,7_24_data\patch\173626_p23_none.npy
 7_24_data,173626.JPG,24,none,7_24_data\patch\173626_p24_none.npy
-7_24_data,173652.JPG,0,none,7_24_data\patch\173652_p0_none.npy
 7_24_data,173652.JPG,1,none,7_24_data\patch\173652_p1_none.npy
 7_24_data,173652.JPG,2,none,7_24_data\patch\173652_p2_none.npy
 7_24_data,173652.JPG,3,none,7_24_data\patch\173652_p3_none.npy
-7_24_data,173652.JPG,4,none,7_24_data\patch\173652_p4_none.npy
 7_24_data,173652.JPG,5,none,7_24_data\patch\173652_p5_none.npy
 7_24_data,173652.JPG,6,none,7_24_data\patch\173652_p6_none.npy
 7_24_data,173652.JPG,7,none,7_24_data\patch\173652_p7_none.npy
@@ -2588,6 +2597,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173652.JPG,10,none,7_24_data\patch\173652_p10_none.npy
 7_24_data,173652.JPG,11,none,7_24_data\patch\173652_p11_none.npy
 7_24_data,173652.JPG,12,none,7_24_data\patch\173652_p12_none.npy
+7_24_data,173652.JPG,13,none,7_24_data\patch\173652_p13_none.npy
 7_24_data,173652.JPG,14,none,7_24_data\patch\173652_p14_none.npy
 7_24_data,173652.JPG,15,none,7_24_data\patch\173652_p15_none.npy
 7_24_data,173652.JPG,16,none,7_24_data\patch\173652_p16_none.npy
@@ -2596,12 +2606,10 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173652.JPG,19,none,7_24_data\patch\173652_p19_none.npy
 7_24_data,173652.JPG,20,none,7_24_data\patch\173652_p20_none.npy
 7_24_data,173652.JPG,21,none,7_24_data\patch\173652_p21_none.npy
-7_24_data,173652.JPG,22,none,7_24_data\patch\173652_p22_none.npy
 7_24_data,173652.JPG,23,none,7_24_data\patch\173652_p23_none.npy
 7_24_data,173652.JPG,24,none,7_24_data\patch\173652_p24_none.npy
 7_24_data,173710.JPG,0,none,7_24_data\patch\173710_p0_none.npy
 7_24_data,173710.JPG,1,none,7_24_data\patch\173710_p1_none.npy
-7_24_data,173710.JPG,2,none,7_24_data\patch\173710_p2_none.npy
 7_24_data,173710.JPG,3,none,7_24_data\patch\173710_p3_none.npy
 7_24_data,173710.JPG,4,none,7_24_data\patch\173710_p4_none.npy
 7_24_data,173710.JPG,5,none,7_24_data\patch\173710_p5_none.npy
@@ -2612,6 +2620,7 @@ day,image_filename,patch_idx,augmentations,npy_path
 7_24_data,173710.JPG,10,none,7_24_data\patch\173710_p10_none.npy
 7_24_data,173710.JPG,11,none,7_24_data\patch\173710_p11_none.npy
 7_24_data,173710.JPG,12,none,7_24_data\patch\173710_p12_none.npy
+7_24_data,173710.JPG,13,none,7_24_data\patch\173710_p13_none.npy
 7_24_data,173710.JPG,14,none,7_24_data\patch\173710_p14_none.npy
 7_24_data,173710.JPG,15,none,7_24_data\patch\173710_p15_none.npy
 7_24_data,173710.JPG,16,none,7_24_data\patch\173710_p16_none.npy
