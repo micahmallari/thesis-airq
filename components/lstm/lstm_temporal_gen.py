@@ -140,19 +140,25 @@ class LSTMTemporalFeatureGenerator:
         """
         Train LSTM model (training only, no feature extraction)
         Compatible with pipeline pattern: separate training and extraction
+        Now tracks metrics like CapsNet: loss and R² for both train and validation
         """
         if epochs is not None:
             self.params['epochs'] = epochs
         if timesteps is None:
             timesteps = self.params.get('timesteps', 60)
         
-        # Prepare sequences
+        # Prepare training sequences
         X_train, y_train = self.prepare_temporal_sequences(train_temporal_data, train_targets, timesteps)
         X_train_tensor = torch.FloatTensor(X_train)
         y_train_tensor = torch.FloatTensor(y_train).unsqueeze(1)
         
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
         train_loader = DataLoader(train_dataset, batch_size=self.params['batch_size'], shuffle=True)
+        
+        # Prepare validation sequences
+        X_val, y_val = self.prepare_temporal_sequences(val_temporal_data, val_targets, timesteps)
+        X_val_tensor = torch.FloatTensor(X_val)
+        y_val_tensor = torch.FloatTensor(y_val).unsqueeze(1)
         
         # Initialize model
         self.model = LSTMTemporalFeatureExtractor(
@@ -171,10 +177,22 @@ class LSTMTemporalFeatureGenerator:
             weight_decay=self.params.get('weight_decay', 0.0)
         )
         
-        # Training loop
-        self.model.train()
+        # Track metrics like CapsNet
+        train_losses = []
+        val_losses = []
+        train_r2_scores = []
+        val_r2_scores = []
+        best_val_loss = float('inf')
+        best_epoch = 0
+        
+        # Training loop with metrics tracking
         for epoch in range(self.params['epochs']):
-            total_loss = 0
+            # Training phase
+            self.model.train()
+            total_train_loss = 0
+            train_predictions = []
+            train_actuals = []
+            
             for batch_X, batch_y in train_loader:
                 optimizer.zero_grad()
                 _, predictions = self.model(batch_X, return_features_only=False)
@@ -185,22 +203,109 @@ class LSTMTemporalFeatureGenerator:
                     max_norm=self.params.get('grad_clip', 1.0)
                 )
                 optimizer.step()
-                total_loss += loss.item()
+                
+                total_train_loss += loss.item() * len(batch_X)
+                train_predictions.extend(predictions.detach().numpy().flatten())
+                train_actuals.extend(batch_y.numpy().flatten())
+            
+            # Calculate training metrics
+            avg_train_loss = total_train_loss / len(X_train)
+            train_r2 = self._calculate_r2(train_actuals, train_predictions)
+            train_losses.append(avg_train_loss)
+            train_r2_scores.append(train_r2)
+            
+            # Validation phase
+            self.model.eval()
+            with torch.no_grad():
+                _, val_predictions = self.model(X_val_tensor, return_features_only=False)
+                val_loss = criterion(val_predictions, y_val_tensor).item()
+                val_r2 = self._calculate_r2(
+                    y_val_tensor.numpy().flatten(),
+                    val_predictions.numpy().flatten()
+                )
+                val_losses.append(val_loss)
+                val_r2_scores.append(val_r2)
+                
+                # Track best model
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_epoch = epoch + 1
+            
+            # Print progress every 2 epochs or on last epoch
+            if (epoch + 1) % 2 == 0 or (epoch + 1) == self.params['epochs']:
+                print(f"    Epoch {epoch+1}/{self.params['epochs']}: "
+                      f"Train Loss={avg_train_loss:.4f}, Train R²={train_r2:.4f} | "
+                      f"Val Loss={val_loss:.4f}, Val R²={val_r2:.4f}")
         
-        print(f"  LSTM training completed: {self.params['epochs']} epochs")
+        # Store training history
+        self.training_history = {
+            'train_losses': train_losses,
+            'val_losses': val_losses,
+            'train_r2_scores': train_r2_scores,
+            'val_r2_scores': val_r2_scores,
+            'best_epoch': best_epoch,
+            'best_val_loss': best_val_loss
+        }
+        
+        print(f"  LSTM training completed: {self.params['epochs']} epochs (Best: Epoch {best_epoch}, Val Loss={best_val_loss:.4f})")
         return self.model
+    
+    def _calculate_r2(self, y_true, y_pred):
+        """Calculate R² score"""
+        import numpy as np
+        y_true = np.array(y_true)
+        y_pred = np.array(y_pred)
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+        r2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+        return r2
 
     def save_model(self, model_path):
-        """Save trained LSTM model to file"""
+        """Save trained LSTM model to file with training history (like CapsNet)"""
         if self.model is None:
             raise ValueError("No model to save. Train the model first.")
         
-        torch.save({
+        # Prepare checkpoint with metrics
+        checkpoint = {
             'model_state_dict': self.model.state_dict(),
             'params': self.params,
             'scaler': self.scaler
-        }, model_path)
+        }
+        
+        # Add training history if available
+        if hasattr(self, 'training_history'):
+            checkpoint.update({
+                'train_losses': self.training_history['train_losses'],
+                'val_losses': self.training_history['val_losses'],
+                'train_r2_scores': self.training_history['train_r2_scores'],
+                'val_r2_scores': self.training_history['val_r2_scores'],
+                'best_epoch': self.training_history['best_epoch'],
+                'best_val_loss': self.training_history['best_val_loss']
+            })
+        
+        torch.save(checkpoint, model_path)
         print(f"  LSTM model saved to: {model_path}")
+        
+        # Optionally save training history to JSON (like CapsNet does)
+        if hasattr(self, 'training_history'):
+            import json
+            import os
+            history_path = model_path.replace('.pth', '_history.json')
+            
+            # Convert numpy types to Python types for JSON serialization
+            history_json = {
+                'train_losses': [float(x) for x in self.training_history['train_losses']],
+                'val_losses': [float(x) for x in self.training_history['val_losses']],
+                'train_r2_scores': [float(x) for x in self.training_history['train_r2_scores']],
+                'val_r2_scores': [float(x) for x in self.training_history['val_r2_scores']],
+                'best_epoch': int(self.training_history['best_epoch']),
+                'best_val_loss': float(self.training_history['best_val_loss']),
+                'epochs': len(self.training_history['train_losses'])
+            }
+            
+            with open(history_path, 'w') as f:
+                json.dump(history_json, f, indent=2)
+            print(f"  Training history saved to: {history_path}")
 
     def load_model(self, model_path):
         """Load trained LSTM model from file"""
